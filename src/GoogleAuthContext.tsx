@@ -26,7 +26,7 @@ const AUTHORIZED_EMAILS = [
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Google Auth Provider
+// Google Auth Provider with Redirect Flow
 export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -34,72 +34,88 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const initializeGoogleAuth = async () => {
+    const initializeAuth = async () => {
       try {
-        // Wait for Google API to load
-        await new Promise<void>((resolve) => {
-          if (window.google) {
-            resolve();
-          } else {
-            const checkGoogle = setInterval(() => {
-              if (window.google) {
-                clearInterval(checkGoogle);
-                resolve();
+        // Check if we're returning from Google OAuth
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get("code");
+
+        if (code) {
+          // We have an authorization code, exchange it for user info
+          await handleAuthCode(code);
+          // Clean up the URL
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
+        } else {
+          // Check if user is already signed in
+          const savedUser = localStorage.getItem("googleUser");
+          if (savedUser) {
+            try {
+              const userData = JSON.parse(savedUser);
+              if (AUTHORIZED_EMAILS.includes(userData.email.toLowerCase())) {
+                setUser(userData);
+              } else {
+                localStorage.removeItem("googleUser");
               }
-            }, 100);
-
-            // Timeout after 10 seconds
-            setTimeout(() => {
-              clearInterval(checkGoogle);
-              resolve();
-            }, 10000);
-          }
-        });
-
-        // Initialize Google Auth if API is loaded
-        if (window.google && window.google.accounts) {
-          window.google.accounts.id.initialize({
-            client_id:
-              "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
-            callback: handleGoogleResponse,
-            auto_select: false,
-          });
-        }
-
-        // Check if user is already signed in
-        const savedUser = localStorage.getItem("googleUser");
-        if (savedUser) {
-          try {
-            const userData = JSON.parse(savedUser);
-            if (AUTHORIZED_EMAILS.includes(userData.email.toLowerCase())) {
-              setUser(userData);
-            } else {
+            } catch (error) {
               localStorage.removeItem("googleUser");
             }
-          } catch (error) {
-            localStorage.removeItem("googleUser");
           }
         }
       } catch (error) {
-        console.error("Error initializing Google Auth:", error);
+        console.error("Error initializing auth:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    initializeGoogleAuth();
+    initializeAuth();
   }, []);
 
-  const handleGoogleResponse = (response: any) => {
+  const handleAuthCode = async (code: string) => {
     try {
-      // Decode the JWT token to get user info
-      const decodedToken = JSON.parse(atob(response.credential.split(".")[1]));
+      // In a real implementation, you'd exchange the code for tokens on your backend
+      // For now, we'll use the Google API to get user info
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          code: code,
+          client_id:
+            "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
+          client_secret: "", // This should be on your backend in production
+          redirect_uri: window.location.origin,
+          grant_type: "authorization_code",
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to exchange code for token");
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      // Get user info using the access token
+      const userResponse = await fetch(
+        `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenData.access_token}`
+      );
+
+      if (!userResponse.ok) {
+        throw new Error("Failed to get user info");
+      }
+
+      const googleUser = await userResponse.json();
 
       const userData: User = {
-        id: decodedToken.sub,
-        email: decodedToken.email,
-        name: decodedToken.name,
-        picture: decodedToken.picture,
+        id: googleUser.id,
+        email: googleUser.email,
+        name: googleUser.name,
+        picture: googleUser.picture,
       };
 
       // Check if email is authorized
@@ -114,88 +130,32 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setUser(userData);
       localStorage.setItem("googleUser", JSON.stringify(userData));
     } catch (error) {
-      console.error("Error handling Google response:", error);
+      console.error("Error handling auth code:", error);
       alert("Authentication failed. Please try again.");
     }
   };
 
   const signInWithGoogle = () => {
-    if (window.google && window.google.accounts) {
-      // Re-initialize to ensure fresh state
-      window.google.accounts.id.initialize({
-        client_id:
-          "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
-        callback: handleGoogleResponse,
-        auto_select: false,
-      });
+    const clientId =
+      "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com";
+    const redirectUri = window.location.origin;
+    const scope = "openid email profile";
 
-      // Try the prompt method first
-      window.google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // If prompt doesn't work, try rendering a button
-          const tempDiv = document.createElement("div");
-          tempDiv.style.position = "fixed";
-          tempDiv.style.top = "50%";
-          tempDiv.style.left = "50%";
-          tempDiv.style.transform = "translate(-50%, -50%)";
-          tempDiv.style.zIndex = "9999";
-          tempDiv.style.backgroundColor = "white";
-          tempDiv.style.padding = "20px";
-          tempDiv.style.borderRadius = "8px";
-          tempDiv.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
-          document.body.appendChild(tempDiv);
+    const authUrl =
+      `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `response_type=code&` +
+      `access_type=offline&` +
+      `prompt=select_account`;
 
-          try {
-            window.google.accounts.id.renderButton(tempDiv, {
-              theme: "outline",
-              size: "large",
-              text: "signin_with",
-              shape: "rectangular",
-            });
-
-            // Add a close button
-            const closeBtn = document.createElement("button");
-            closeBtn.textContent = "×";
-            closeBtn.style.position = "absolute";
-            closeBtn.style.top = "5px";
-            closeBtn.style.right = "10px";
-            closeBtn.style.border = "none";
-            closeBtn.style.background = "none";
-            closeBtn.style.fontSize = "20px";
-            closeBtn.style.cursor = "pointer";
-            closeBtn.onclick = () => {
-              if (document.body.contains(tempDiv)) {
-                document.body.removeChild(tempDiv);
-              }
-            };
-            tempDiv.appendChild(closeBtn);
-          } catch (error) {
-            console.error("Error creating Google button:", error);
-            if (document.body.contains(tempDiv)) {
-              document.body.removeChild(tempDiv);
-            }
-            alert(
-              "Google Sign-In is not available. Please refresh the page and try again."
-            );
-          }
-        }
-      });
-    } else {
-      console.error("Google API not loaded");
-      alert(
-        "Google Sign-In is not available. Please refresh the page and try again."
-      );
-    }
+    window.location.href = authUrl;
   };
 
   const signOut = () => {
     setUser(null);
     localStorage.removeItem("googleUser");
-
-    // Sign out from Google
-    if (window.google && window.google.accounts) {
-      window.google.accounts.id.disableAutoSelect();
-    }
   };
 
   return (
@@ -222,7 +182,7 @@ export const useAuth = (): AuthContextType => {
   return context;
 };
 
-// Add Google types to window
+// Add types for window
 declare global {
   interface Window {
     google: any;
