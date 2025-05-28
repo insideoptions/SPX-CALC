@@ -21,6 +21,7 @@ const AUTHORIZED_EMAILS = [
   "michael@insideoptions.io",
   "michaelarroz@gmail.com",
   "michael@spxprogram.com",
+  "rkhirbat@gmail.com",
   // Add more authorized emails here as needed
 ];
 
