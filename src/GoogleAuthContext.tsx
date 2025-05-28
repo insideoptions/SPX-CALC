@@ -61,6 +61,7 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
           window.google.accounts.id.initialize({
             client_id:
               "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
+            callback: handleGoogleResponse,
             auto_select: false,
           });
         }
@@ -120,14 +121,28 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const signInWithGoogle = () => {
     if (window.google && window.google.accounts) {
-      // First try the prompt method
+      // Re-initialize to ensure fresh state
+      window.google.accounts.id.initialize({
+        client_id:
+          "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
+        callback: handleGoogleResponse,
+        auto_select: false,
+      });
+
+      // Try the prompt method first
       window.google.accounts.id.prompt((notification: any) => {
         if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // If prompt doesn't work, create a temporary button
+          // If prompt doesn't work, try rendering a button
           const tempDiv = document.createElement("div");
           tempDiv.style.position = "fixed";
-          tempDiv.style.top = "-1000px";
-          tempDiv.style.left = "-1000px";
+          tempDiv.style.top = "50%";
+          tempDiv.style.left = "50%";
+          tempDiv.style.transform = "translate(-50%, -50%)";
+          tempDiv.style.zIndex = "9999";
+          tempDiv.style.backgroundColor = "white";
+          tempDiv.style.padding = "20px";
+          tempDiv.style.borderRadius = "8px";
+          tempDiv.style.boxShadow = "0 4px 6px rgba(0, 0, 0, 0.1)";
           document.body.appendChild(tempDiv);
 
           try {
@@ -138,24 +153,30 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
               shape: "rectangular",
             });
 
-            // Find and click the button
-            setTimeout(() => {
-              const googleButton = tempDiv.querySelector(
-                'div[role="button"]'
-              ) as HTMLElement;
-              if (googleButton) {
-                googleButton.click();
+            // Add a close button
+            const closeBtn = document.createElement("button");
+            closeBtn.textContent = "×";
+            closeBtn.style.position = "absolute";
+            closeBtn.style.top = "5px";
+            closeBtn.style.right = "10px";
+            closeBtn.style.border = "none";
+            closeBtn.style.background = "none";
+            closeBtn.style.fontSize = "20px";
+            closeBtn.style.cursor = "pointer";
+            closeBtn.onclick = () => {
+              if (document.body.contains(tempDiv)) {
+                document.body.removeChild(tempDiv);
               }
-              // Clean up
-              setTimeout(() => {
-                if (document.body.contains(tempDiv)) {
-                  document.body.removeChild(tempDiv);
-                }
-              }, 100);
-            }, 100);
+            };
+            tempDiv.appendChild(closeBtn);
           } catch (error) {
             console.error("Error creating Google button:", error);
-            document.body.removeChild(tempDiv);
+            if (document.body.contains(tempDiv)) {
+              document.body.removeChild(tempDiv);
+            }
+            alert(
+              "Google Sign-In is not available. Please refresh the page and try again."
+            );
           }
         }
       });
