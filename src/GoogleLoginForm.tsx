@@ -15,8 +15,9 @@ const GoogleLoginForm: React.FC = () => {
             theme: "outline",
             size: "large",
             text: "signin_with",
-            shape: "rectangular",
-            width: 300,
+            shape: "pill",
+            width: 280,
+            logo_alignment: "left",
           });
           setGoogleButtonRendered(true);
         } catch (error) {
@@ -35,18 +36,40 @@ const GoogleLoginForm: React.FC = () => {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#f7f8fc",
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          overflow: "hidden",
         }}
       >
         <div
           style={{
             textAlign: "center",
-            color: "#4b5563",
-            fontSize: "1.1rem",
+            color: "white",
+            fontSize: "1.2rem",
+            animation: "pulse 2s ease-in-out infinite",
           }}
         >
+          <div
+            style={{
+              width: "50px",
+              height: "50px",
+              border: "3px solid rgba(255, 255, 255, 0.3)",
+              borderTopColor: "white",
+              borderRadius: "50%",
+              margin: "0 auto 1rem",
+              animation: "spin 1s linear infinite",
+            }}
+          ></div>
           Loading authentication...
         </div>
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -58,28 +81,97 @@ const GoogleLoginForm: React.FC = () => {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#f7f8fc",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         padding: "1rem",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {/* Animated background elements */}
       <div
         style={{
-          backgroundColor: "white",
-          padding: "3rem 2rem",
-          borderRadius: "12px",
-          boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+          position: "absolute",
+          width: "300px",
+          height: "300px",
+          background:
+            "radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%)",
+          borderRadius: "50%",
+          top: "-100px",
+          right: "-100px",
+          animation: "float 20s ease-in-out infinite",
+        }}
+      ></div>
+      <div
+        style={{
+          position: "absolute",
+          width: "200px",
+          height: "200px",
+          background:
+            "radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%)",
+          borderRadius: "50%",
+          bottom: "-50px",
+          left: "-50px",
+          animation: "float 15s ease-in-out infinite reverse",
+        }}
+      ></div>
+
+      <div
+        style={{
+          backgroundColor: "rgba(255, 255, 255, 0.95)",
+          backdropFilter: "blur(10px)",
+          padding: "3rem 2.5rem",
+          borderRadius: "24px",
+          boxShadow:
+            "0 20px 40px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.2)",
           width: "100%",
-          maxWidth: "400px",
+          maxWidth: "420px",
           textAlign: "center",
+          position: "relative",
+          animation: "slideUp 0.5s ease-out",
         }}
       >
+        {/* Logo/Icon */}
+        <div
+          style={{
+            width: "60px",
+            height: "60px",
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            borderRadius: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 1.5rem",
+            boxShadow: "0 10px 20px rgba(102, 126, 234, 0.3)",
+            transform: "rotate(-5deg)",
+            transition: "transform 0.3s ease",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.transform = "rotate(0deg) scale(1.05)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.transform = "rotate(-5deg) scale(1)")
+          }
+        >
+          <span
+            style={{
+              color: "white",
+              fontSize: "24px",
+              fontWeight: "bold",
+              transform: "rotate(5deg)",
+            }}
+          >
+            SPX
+          </span>
+        </div>
+
         <div style={{ marginBottom: "2rem" }}>
           <h1
             style={{
-              color: "#1f2937",
-              fontSize: "1.875rem",
-              fontWeight: "700",
+              color: "#1a1a1a",
+              fontSize: "2rem",
+              fontWeight: "800",
               marginBottom: "0.5rem",
+              letterSpacing: "-0.5px",
             }}
           >
             SPX Program Webapps
@@ -87,8 +179,9 @@ const GoogleLoginForm: React.FC = () => {
           <p
             style={{
               color: "#6b7280",
-              fontSize: "1rem",
+              fontSize: "0.95rem",
               margin: 0,
+              fontWeight: "500",
             }}
           >
             InsideOptions LLC
@@ -99,21 +192,23 @@ const GoogleLoginForm: React.FC = () => {
           <h2
             style={{
               color: "#374151",
-              fontSize: "1.25rem",
+              fontSize: "1.5rem",
               fontWeight: "600",
-              marginBottom: "1rem",
+              marginBottom: "0.75rem",
+              letterSpacing: "-0.3px",
             }}
           >
-            Sign in to continue
+            Welcome back
           </h2>
           <p
             style={{
               color: "#6b7280",
-              fontSize: "0.875rem",
-              marginBottom: "1.5rem",
+              fontSize: "0.95rem",
+              marginBottom: "2rem",
+              lineHeight: "1.5",
             }}
           >
-            Use your Google account to access Webapps
+            Sign in with your Google account to continue
           </p>
         </div>
 
@@ -123,9 +218,16 @@ const GoogleLoginForm: React.FC = () => {
             display: "flex",
             justifyContent: "center",
             marginBottom: "2rem",
+            minHeight: "50px",
           }}
         >
-          <div id="google-signin-button"></div>
+          <div
+            id="google-signin-button"
+            style={{
+              transition: "transform 0.2s ease",
+              cursor: "pointer",
+            }}
+          ></div>
         </div>
 
         {/* Fallback button - only show if Google button failed to render */}
@@ -138,27 +240,32 @@ const GoogleLoginForm: React.FC = () => {
               justifyContent: "center",
               gap: "0.75rem",
               width: "100%",
-              padding: "0.75rem 1rem",
+              padding: "0.875rem 1.5rem",
               backgroundColor: "white",
-              border: "1px solid #d1d5db",
-              borderRadius: "8px",
+              border: "2px solid #e5e7eb",
+              borderRadius: "100px",
               cursor: "pointer",
-              fontSize: "0.875rem",
-              fontWeight: "500",
+              fontSize: "1rem",
+              fontWeight: "600",
               color: "#374151",
-              transition: "all 0.2s",
+              transition: "all 0.3s ease",
               marginBottom: "1.5rem",
+              boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
             }}
-            onMouseOver={(e) => {
+            onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = "#f9fafb";
               e.currentTarget.style.borderColor = "#9ca3af";
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.1)";
             }}
-            onMouseOut={(e) => {
+            onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = "white";
-              e.currentTarget.style.borderColor = "#d1d5db";
+              e.currentTarget.style.borderColor = "#e5e7eb";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.05)";
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 18 18">
+            <svg width="20" height="20" viewBox="0 0 18 18">
               <path
                 fill="#4285F4"
                 d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"
@@ -182,27 +289,46 @@ const GoogleLoginForm: React.FC = () => {
 
         <div
           style={{
-            padding: "1rem",
-            backgroundColor: "#f0f9ff",
-            borderRadius: "8px",
-            border: "1px solid #bfdbfe",
+            padding: "1.25rem",
+            background: "linear-gradient(135deg, #f0f9ff 0%, #e0e7ff 100%)",
+            borderRadius: "16px",
+            border: "1px solid rgba(147, 197, 253, 0.3)",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
           <div
             style={{
-              fontSize: "0.75rem",
-              color: "#1e40af",
-              fontWeight: "500",
-              marginBottom: "0.25rem",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "3px",
+              background: "linear-gradient(90deg, #667eea 0%, #764ba2 100%)",
+              borderRadius: "16px 16px 0 0",
+            }}
+          ></div>
+          <div
+            style={{
+              fontSize: "0.875rem",
+              color: "#4338ca",
+              fontWeight: "600",
+              marginBottom: "0.5rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.5rem",
             }}
           >
-            🔒 Authorized Access Only
+            <span style={{ fontSize: "1.1rem" }}>🔒</span>
+            Authorized Access Only
           </div>
           <div
             style={{
-              fontSize: "0.75rem",
-              color: "#3730a3",
-              lineHeight: "1.4",
+              fontSize: "0.813rem",
+              color: "#4c1d95",
+              lineHeight: "1.5",
+              opacity: 0.9,
             }}
           >
             Only authorized email addresses can access this application. Contact
@@ -213,15 +339,50 @@ const GoogleLoginForm: React.FC = () => {
         <div
           style={{
             marginTop: "2rem",
-            paddingTop: "1rem",
-            borderTop: "1px solid #e5e7eb",
-            fontSize: "0.75rem",
+            paddingTop: "1.5rem",
+            borderTop: "1px solid rgba(229, 231, 235, 0.5)",
+            fontSize: "0.813rem",
             color: "#9ca3af",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
           }}
         >
+          <span style={{ opacity: 0.7 }}>🛡️</span>
           Secure authentication powered by Google
         </div>
       </div>
+
+      <style>{`
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        @keyframes float {
+          0%, 100% {
+            transform: translate(0, 0) scale(1);
+          }
+          33% {
+            transform: translate(30px, -30px) scale(1.05);
+          }
+          66% {
+            transform: translate(-20px, 20px) scale(0.95);
+          }
+        }
+        #google-signin-button > div {
+          transition: transform 0.2s ease !important;
+        }
+        #google-signin-button:hover > div {
+          transform: translateY(-2px) !important;
+        }
+      `}</style>
     </div>
   );
 };
