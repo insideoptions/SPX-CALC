@@ -59,7 +59,8 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Initialize Google Auth if API is loaded
         if (window.google && window.google.accounts) {
           window.google.accounts.id.initialize({
-            client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || "",
+            client_id:
+              "608251487888-svu2qkjsjqtbptqe2je14b9a2paqovg6.apps.googleusercontent.com",
             auto_select: false,
           });
         }
