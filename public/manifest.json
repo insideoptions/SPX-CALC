@@ -1,0 +1,9 @@
+{
+    "short_name": "SPX Program",
+    "name": "SPX Program Webapps",
+    "icons": [],
+    "start_url": "/",
+    "display": "standalone",
+    "theme_color": "#4361ee",
+    "background_color": "#ffffff"
+  }
