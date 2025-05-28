@@ -208,7 +208,7 @@ const GoogleLoginForm: React.FC = () => {
               lineHeight: "1.5",
             }}
           >
-            Sign in with your Google account to continue
+            Use the email linked to your IO Slack account
           </p>
         </div>
 
@@ -331,8 +331,7 @@ const GoogleLoginForm: React.FC = () => {
               opacity: 0.9,
             }}
           >
-            Only authorized email addresses can access this application. Contact
-            your administrator if you need access.
+            Only authorized email addresses can access this application.
           </div>
         </div>
 
