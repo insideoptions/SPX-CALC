@@ -316,35 +316,221 @@
   font-weight: 500;
 }
 
-/* Mobile Responsiveness */
+/* Mobile Responsiveness - ENHANCED FOR BETTER MOBILE EXPERIENCE */
 @media (max-width: 768px) {
-  .spx-matrix-user .matrix-selector-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .spx-matrix-user .buying-power-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .spx-matrix-user .trading-quantities-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .spx-matrix-user .channels-grid {
-    grid-template-columns: 1fr;
+  .spx-matrix-user .calculator-container {
+    padding: 0.75rem;
   }
 
   .spx-matrix-user .card {
     padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .spx-matrix-user .section-title {
+    font-size: 1.1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .spx-matrix-user .header h1 {
+    font-size: 1.4rem;
+  }
+
+  .spx-matrix-user .matrix-selector-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .spx-matrix-user .matrix-selector-button {
+    padding: 0.75rem;
+  }
+
+  .spx-matrix-user .buying-power-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .spx-matrix-user .buying-power-button {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.9rem;
+  }
+
+  /* IMPROVED MOBILE QUANTITIES GRID */
+  .spx-matrix-user .trading-quantities-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+  }
+
+  .spx-matrix-user .quantity-card {
+    padding: 0.6rem 0.3rem;
+    border-radius: 6px;
+  }
+
+  .spx-matrix-user .quantity-level {
+    font-size: 0.7rem;
+    margin-bottom: 0.3rem;
+    font-weight: 700;
+  }
+
+  .spx-matrix-user .quantity-value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 0.2rem;
+    line-height: 1;
+  }
+
+  .spx-matrix-user .quantity-label {
+    font-size: 0.65rem;
+    line-height: 1;
+  }
+
+  .spx-matrix-user .channels-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .spx-matrix-user .trading-panel-empty {
+    padding: 1.5rem;
+  }
+
+  .spx-matrix-user .trading-panel-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
   }
 }
 
+/* iPhone specific optimizations */
 @media (max-width: 480px) {
-  .spx-matrix-user .trading-quantities-grid {
-    grid-template-columns: 1fr;
+  .spx-matrix-user .calculator-container {
+    padding: 0.5rem;
+  }
+
+  .spx-matrix-user .card {
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .spx-matrix-user .header {
+    margin-bottom: 1rem;
+  }
+
+  .spx-matrix-user .header h1 {
+    font-size: 1.25rem;
+    line-height: 1.2;
   }
 
   .spx-matrix-user .buying-power-grid {
     grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .spx-matrix-user .buying-power-button {
+    padding: 0.75rem;
+    font-size: 1rem;
+  }
+
+  /* COMPACT MOBILE QUANTITIES - FITS ON SCREEN */
+  .spx-matrix-user .trading-quantities-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.25rem;
+  }
+
+  .spx-matrix-user .quantity-card {
+    padding: 0.4rem 0.2rem;
+    border-radius: 4px;
+    min-height: auto;
+  }
+
+  .spx-matrix-user .quantity-level {
+    font-size: 0.6rem;
+    margin-bottom: 0.2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .spx-matrix-user .quantity-value {
+    font-size: 0.95rem;
+    font-weight: 900;
+    margin-bottom: 0.1rem;
+    line-height: 1;
+  }
+
+  .spx-matrix-user .skip-value {
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .spx-matrix-user .quantity-label {
+    font-size: 0.55rem;
+    line-height: 1;
+    margin-top: 0.1rem;
+  }
+
+  .spx-matrix-user .section-title {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .spx-matrix-user .matrix-selector-button {
+    padding: 0.6rem;
+  }
+
+  .spx-matrix-user .matrix-selector-title {
+    font-size: 0.9rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .spx-matrix-user .matrix-selector-subtitle {
+    font-size: 0.75rem;
+  }
+
+  .spx-matrix-user .instruction-card {
+    padding: 0.75rem;
+  }
+
+  .spx-matrix-user .channel-card {
+    padding: 0.75rem;
+  }
+
+  .spx-matrix-user .trading-panel-empty {
+    padding: 1rem;
+  }
+
+  .spx-matrix-user .trading-panel-empty h4 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .spx-matrix-user .trading-panel-empty p {
+    font-size: 0.9rem;
+  }
+}
+
+/* Ultra compact for very small screens */
+@media (max-width: 360px) {
+  .spx-matrix-user .trading-quantities-grid {
+    gap: 0.15rem;
+  }
+
+  .spx-matrix-user .quantity-card {
+    padding: 0.3rem 0.1rem;
+  }
+
+  .spx-matrix-user .quantity-level {
+    font-size: 0.55rem;
+  }
+
+  .spx-matrix-user .quantity-value {
+    font-size: 0.85rem;
+  }
+
+  .spx-matrix-user .skip-value {
+    font-size: 0.65rem;
+  }
+
+  .spx-matrix-user .quantity-label {
+    font-size: 0.5rem;
   }
 }
