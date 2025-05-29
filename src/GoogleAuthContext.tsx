@@ -25,6 +25,7 @@ const AUTHORIZED_EMAILS = [
   "david@insideoptions.io",
   "roland@insideoptions.io",
   "broc@insideoptions.io",
+  "josephle.mcse@gmail.com",
 ];
 
 const AuthContext = createContext<AuthContextType | null>(null);
