@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./SpxMatrixUser.css";
+
 interface MatrixData {
   headerInfo: {
     title: string;
@@ -25,6 +26,7 @@ interface MatrixData {
     };
   };
 }
+
 const SpxMatrixUser: React.FC = () => {
   // This would typically come from your backend/API
   const [matrixData, setMatrixData] = useState<MatrixData>({
@@ -232,15 +234,18 @@ const SpxMatrixUser: React.FC = () => {
       },
     },
   });
+
   const [selectedMatrix, setSelectedMatrix] = useState("level2Start");
   const [selectedBuyingPower, setSelectedBuyingPower] = useState<string | null>(
     null
   );
+
   const getBuyingPowerOptions = () => {
     return matrixData.matrices[selectedMatrix].data.map(
       (row) => row.buyingPower
     );
   };
+
   const MatrixSelector = () => (
     <div className="card">
       <h3 className="section-title">Select Your Trading Matrix</h3>
@@ -260,9 +265,10 @@ const SpxMatrixUser: React.FC = () => {
       </div>
     </div>
   );
+
   const BuyingPowerSelector = () => (
     <div className="card">
-      <h3 className="section-title">:moneybag: Select Your Buying Power</h3>
+      <h3 className="section-title">Select Your Buying Power</h3>
       <div className="buying-power-grid">
         {getBuyingPowerOptions().map((bp) => (
           <button
@@ -278,31 +284,54 @@ const SpxMatrixUser: React.FC = () => {
       </div>
     </div>
   );
+
   const TradingPanel = () => {
     if (!selectedBuyingPower) {
       return (
         <div className="card">
           <div className="trading-panel-empty">
-            <div className="trading-panel-icon">:chart_with_upwards_trend:</div>
-            <p>Please select your buying power to view trading quantities</p>
+            <div className="trading-panel-icon">
+              <svg
+                width="64"
+                height="64"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+              </svg>
+            </div>
+            <h4>Select Your Buying Power</h4>
+            <p>
+              Please click on one of the buying power amounts above to view your
+              specific trading quantities for each level.
+            </p>
           </div>
         </div>
       );
     }
+
     const currentRow = matrixData.matrices[selectedMatrix].data.find(
       (row) => row.buyingPower === selectedBuyingPower
     );
+
     if (!currentRow) return null;
+
     return (
       <div className="card">
         <h3 className="section-title">
-          :bar_chart: Your Trading Quantities - {selectedBuyingPower}
+          Your Trading Quantities - {selectedBuyingPower}
         </h3>
+
         <div className="trading-quantities-grid">
           {[1, 2, 3, 4, 5].map((level) => {
             const quantity =
               currentRow[`level${level}` as keyof typeof currentRow];
             const isSkip = quantity === "Skip / No Trade";
+
             return (
               <div
                 key={level}
@@ -326,45 +355,49 @@ const SpxMatrixUser: React.FC = () => {
       </div>
     );
   };
+
   const InstructionsPanel = () => (
     <div className="card">
-      <h3 className="section-title">:clipboard: Instructions & Channels</h3>
+      <h3 className="section-title">Instructions & Channels</h3>
+
       <div className="instructions-grid">
         <div className="instruction-card warning">
-          <h4 className="instruction-title">:books: Trading Instructions</h4>
+          <h4 className="instruction-title">Trading Instructions</h4>
           <p className="instruction-text">
             {matrixData.headerInfo.instructions}
           </p>
         </div>
+
         <div className="instruction-card info">
-          <h4 className="instruction-title">
-            :information_source: Important Notes
-          </h4>
+          <h4 className="instruction-title">Important Notes</h4>
           <p className="instruction-text">{matrixData.headerInfo.note}</p>
         </div>
+
         <div className="channels-grid">
           <div className="channel-card manual">
-            <h4 className="channel-title">:hand: Manual Entry</h4>
+            <h4 className="channel-title">Manual Entry</h4>
             <p className="channel-text">
               {matrixData.headerInfo.manualChannel}
             </p>
           </div>
+
           <div className="channel-card tos">
-            <h4 className="channel-title">
-              :desktop_computer: ThinkorSwim Alerts
-            </h4>
+            <h4 className="channel-title">ThinkorSwim Alerts</h4>
             <p className="channel-text">{matrixData.headerInfo.tosChannel}</p>
           </div>
         </div>
       </div>
     </div>
   );
+
   const MatrixDisplayTable = () => {
     const currentMatrix = matrixData.matrices[selectedMatrix];
+
     return (
       <div className="card">
         <h3 className="section-title">{currentMatrix.title}</h3>
         <p className="matrix-description">{currentMatrix.subtitle}</p>
+
         <div className="matrix-table-container">
           <table className="matrix-table">
             <thead>
@@ -391,6 +424,7 @@ const SpxMatrixUser: React.FC = () => {
                   {[1, 2, 3, 4, 5].map((level) => {
                     const quantity = row[`level${level}` as keyof typeof row];
                     const isSkip = quantity === "Skip / No Trade";
+
                     return (
                       <td
                         key={level}
@@ -410,26 +444,33 @@ const SpxMatrixUser: React.FC = () => {
       </div>
     );
   };
+
   return (
     <div className="calculator-container">
       {/* Header */}
       <div className="header">
         <h1>{matrixData.headerInfo.title}</h1>
         <div className="header-date">
-          :date: Updated: {new Date().toLocaleDateString()}
+          Updated: {new Date().toLocaleDateString()}
         </div>
       </div>
+
       {/* Matrix Selection */}
       <MatrixSelector />
+
       {/* Buying Power Selection */}
       <BuyingPowerSelector />
+
       {/* Trading Panel */}
       <TradingPanel />
+
       {/* Instructions */}
       <InstructionsPanel />
+
       {/* Matrix Display */}
       <MatrixDisplayTable />
     </div>
   );
 };
+
 export default SpxMatrixUser;
