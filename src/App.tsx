@@ -9,7 +9,6 @@ import "./App.css";
 import IronCondorCalculator from "./IronCondorCalculator";
 import MatrixCompounding from "./MatrixCompounding";
 import SpxMatrixUser from "./SpxMatrixUser";
-import TradingLedger from "./TradeLedger";
 import { GoogleAuthProvider, useAuth } from "./GoogleAuthContext";
 import GoogleProtectedRoute from "./GoogleProtectedRoute";
 
@@ -43,14 +42,6 @@ const AppHeader: React.FC = () => {
           }
         >
           SPX Matrix
-        </NavLink>
-        <NavLink
-          to="/ledger"
-          className={({ isActive }) =>
-            isActive ? "nav-link active" : "nav-link"
-          }
-        >
-          Trading Ledger
         </NavLink>
       </div>
 
@@ -148,7 +139,6 @@ const AppContent: React.FC = () => {
             </div>
           }
         />
-        <Route path="/ledger" element={<TradingLedger />} />
       </Routes>
     </div>
   );
