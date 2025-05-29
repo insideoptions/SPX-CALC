@@ -91,3 +91,5 @@ button {
     font-size: 0.9rem;
   }
 }
+@import './TradeLedger.css';
+@import './TradeForm.css';

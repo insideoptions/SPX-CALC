@@ -11,6 +11,8 @@ import MatrixCompounding from "./MatrixCompounding";
 import SpxMatrixUser from "./SpxMatrixUser";
 import { GoogleAuthProvider, useAuth } from "./GoogleAuthContext";
 import GoogleProtectedRoute from "./GoogleProtectedRoute";
+import TradeLedger from "./TradeLedger";
+import TradeForm from "./TradeForm";
 
 // Header component with user info and logout
 const AppHeader: React.FC = () => {
@@ -42,6 +44,15 @@ const AppHeader: React.FC = () => {
           }
         >
           SPX Matrix
+        </NavLink>
+
+        <NavLink
+          to="/ledger"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Trade Ledger
         </NavLink>
       </div>
 
@@ -130,12 +141,14 @@ const AppContent: React.FC = () => {
       <AppHeader />
       <Routes>
         <Route path="/" element={<IronCondorCalculator />} />
+        <Route path="/ledger" element={<TradeLedger />} />
         <Route path="/compounding" element={<MatrixCompounding />} />
         <Route
           path="/spx-matrix"
           element={
             <div className="spx-matrix-user">
               <SpxMatrixUser />
+              
             </div>
           }
         />
