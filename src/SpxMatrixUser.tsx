@@ -31,14 +31,14 @@ const SpxMatrixUser: React.FC = () => {
   // This would typically come from your backend/API
   const [matrixData, setMatrixData] = useState<MatrixData>({
     headerInfo: {
-      title: "OFFICIAL SPX PROGRAM MATRICES",
+      title: "OFFICIAL SPX PROGRAM MATRIX",
       liveAlertTime:
         "Live Alerts will post around 4:00pm EST as the cutoff time is 4:15pm EST on getting filled",
       manualChannel: "#spx-trade-alert channel for manual entry",
       tosChannel:
         "#thinkorswim-alerts-13kbp channel for copy & paste for TOS desktop only",
       instructions:
-        "INSTRUCTIONS FOR ALL MATRICES:\n1. Select your Buying Power (BP) - Money you put in for this program\n2. Trade the number of Quantity in the corresponding row for each level based on trade alert",
+        "INSTRUCTIONS FOR ALL MATRIX:\n1. Select your Buying Power (BP) - Money you put in for this program\n2. Trade the number of Quantity in the corresponding row for each level based on trade alert",
       note: "Note: If you are trading the $11,800 or $16,300 Buying Power Matrix you will skip/no trade level 2 alert\n- Starts trading after 1 Outside day\n- Light Blue - Stay on this Matrix once started",
     },
     matrices: {
