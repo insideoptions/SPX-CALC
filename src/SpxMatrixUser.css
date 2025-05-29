@@ -1,0 +1,350 @@
+/* Inherit base variables from the main app */
+.spx-matrix-user {
+  /* Use same variables as main app */
+  --primary-color: #4361ee;
+  --primary-dark: #3a0ca3;
+  --primary-light: #f0f1fe;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --border-color: #e5e7eb;
+  --card-bg: #ffffff;
+  --secondary-color: #f9fafb;
+}
+
+/* Calculator Container - matches main app styling */
+.spx-matrix-user .calculator-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* Header - matches main app styling */
+.spx-matrix-user .header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.spx-matrix-user .header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.5rem 0;
+}
+
+.spx-matrix-user .header-date {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* Card styling - matches main app */
+.spx-matrix-user .card {
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.spx-matrix-user .section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+/* Matrix Selector */
+.spx-matrix-user .matrix-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.spx-matrix-user .matrix-selector-button {
+  padding: 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.spx-matrix-user .matrix-selector-button:hover {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+}
+
+.spx-matrix-user .matrix-selector-button.active {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.spx-matrix-user .matrix-selector-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: inherit;
+}
+
+.spx-matrix-user .matrix-selector-subtitle {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* Buying Power Selector */
+.spx-matrix-user .buying-power-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.spx-matrix-user .buying-power-button {
+  padding: 0.75rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  color: #047857;
+}
+
+.spx-matrix-user .buying-power-button:hover {
+  border-color: #047857;
+  background-color: #f0fdf4;
+}
+
+.spx-matrix-user .buying-power-button.active {
+  border-color: #047857;
+  background-color: #f0fdf4;
+  color: #065f46;
+}
+
+/* Trading Panel */
+.spx-matrix-user .trading-panel-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 2rem;
+}
+
+.spx-matrix-user .trading-panel-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.spx-matrix-user .trading-quantities-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1rem;
+}
+
+.spx-matrix-user .quantity-card {
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+  border: 2px solid;
+}
+
+.spx-matrix-user .skip-card {
+  border-color: #fca5a5;
+  background-color: #fef2f2;
+}
+
+.spx-matrix-user .trade-card {
+  border-color: #93c5fd;
+  background-color: #eff6ff;
+}
+
+.spx-matrix-user .quantity-level {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.spx-matrix-user .quantity-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.spx-matrix-user .skip-value {
+  color: #dc2626;
+}
+
+.spx-matrix-user .trade-value {
+  color: #2563eb;
+}
+
+.spx-matrix-user .quantity-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Instructions Panel */
+.spx-matrix-user .instructions-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.spx-matrix-user .instruction-card {
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid;
+}
+
+.spx-matrix-user .instruction-card.warning {
+  background-color: #fffbeb;
+  border-color: #f59e0b;
+}
+
+.spx-matrix-user .instruction-card.info {
+  background-color: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.spx-matrix-user .instruction-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.spx-matrix-user .instruction-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.spx-matrix-user .channels-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.spx-matrix-user .channel-card {
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid;
+}
+
+.spx-matrix-user .channel-card.manual {
+  background-color: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.spx-matrix-user .channel-card.tos {
+  background-color: #faf5ff;
+  border-color: #d8b4fe;
+}
+
+.spx-matrix-user .channel-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.spx-matrix-user .channel-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* Matrix Table */
+.spx-matrix-user .matrix-description {
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  white-space: pre-line;
+}
+
+.spx-matrix-user .matrix-table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.spx-matrix-user .matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.spx-matrix-user .matrix-table th,
+.spx-matrix-user .matrix-table td {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.spx-matrix-user .matrix-table th {
+  background-color: var(--secondary-color);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.spx-matrix-user .matrix-table th:first-child,
+.spx-matrix-user .matrix-table td:first-child {
+  text-align: left;
+}
+
+.spx-matrix-user .matrix-table .selected-row {
+  background-color: #f0fdf4;
+  border: 2px solid #22c55e;
+}
+
+.spx-matrix-user .buying-power-cell {
+  font-weight: 600;
+  color: #047857;
+}
+
+.spx-matrix-user .skip-cell {
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.spx-matrix-user .trade-cell {
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .spx-matrix-user .matrix-selector-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spx-matrix-user .buying-power-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .spx-matrix-user .trading-quantities-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .spx-matrix-user .channels-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spx-matrix-user .card {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .spx-matrix-user .trading-quantities-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spx-matrix-user .buying-power-grid {
+    grid-template-columns: 1fr;
+  }
+}
