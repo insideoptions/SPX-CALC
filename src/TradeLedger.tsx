@@ -131,64 +131,112 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         const data = await fetchTrades(user.email);
         console.log("Loaded trades from AWS:", data);
 
-        if (data && data.length > 0) {
-          // Assign series to trades
-          const tradesWithSeries = assignSeriesToTrades(data);
-          setTrades(tradesWithSeries);
-          if (onTradeUpdate) {
-            onTradeUpdate(tradesWithSeries);
-          }
-
-          // Update local storage with the latest data from AWS
-          localStorage.setItem(
-            `trades_${user.email}`,
-            JSON.stringify(tradesWithSeries)
-          );
-        } else {
-          // If no data from API, try local storage as fallback
-          const storedTrades = localStorage.getItem(`trades_${user.email}`);
-          if (storedTrades) {
-            try {
-              const parsedTrades = JSON.parse(storedTrades);
-              console.log(
-                "Using trades from local storage as fallback:",
-                parsedTrades
-              );
-
-              // Assign series to trades from local storage
-              const tradesWithSeries = assignSeriesToTrades(parsedTrades);
-              setTrades(tradesWithSeries);
-              if (onTradeUpdate) {
-                onTradeUpdate(tradesWithSeries);
-              }
-            } catch (error) {
-              console.error("Error parsing stored trades:", error);
-              setTrades([]);
-            }
-          } else {
-            setTrades([]);
+        // Get local storage trades as well
+        let localTrades: Trade[] = [];
+        const storedTrades = localStorage.getItem(`trades_${user.email}`);
+        if (storedTrades) {
+          try {
+            localTrades = JSON.parse(storedTrades);
+            console.log("Found trades in local storage:", localTrades);
+          } catch (error) {
+            console.error("Error parsing stored trades:", error);
           }
         }
+
+        // Determine which data to use
+        let finalTrades: Trade[] = [];
+
+        if (data && data.length > 0) {
+          // We have API data
+          finalTrades = data;
+          console.log("Using API data as primary source");
+
+          // If we have local trades that aren't in the API data, we should sync them
+          if (localTrades.length > 0) {
+            // Find trades in local storage that aren't in the API data
+            const apiTradeIds = new Set(data.map((t) => t.id));
+            const localOnlyTrades = localTrades.filter(
+              (t) => !apiTradeIds.has(t.id)
+            );
+
+            if (localOnlyTrades.length > 0) {
+              console.log(
+                "Found local-only trades that need to be synced:",
+                localOnlyTrades
+              );
+              // We'll add these to our final trades list
+              finalTrades = [...finalTrades, ...localOnlyTrades];
+
+              // And we should also try to sync them to the API
+              // This happens asynchronously and we don't wait for it
+              localOnlyTrades.forEach(async (trade) => {
+                try {
+                  // Remove the id so a new one is generated
+                  const { id, ...tradeWithoutId } = trade;
+                  await createTrade(tradeWithoutId);
+                  console.log("Synced local trade to API:", trade.id);
+                } catch (syncError) {
+                  console.error(
+                    "Failed to sync local trade to API:",
+                    syncError
+                  );
+                }
+              });
+            }
+          }
+        } else if (localTrades.length > 0) {
+          // No API data but we have local data
+          finalTrades = localTrades;
+          console.log("Using local storage data as fallback");
+
+          // Try to sync these to the API
+          localTrades.forEach(async (trade) => {
+            try {
+              // Remove the id so a new one is generated
+              const { id, ...tradeWithoutId } = trade;
+              await createTrade(tradeWithoutId);
+              console.log("Synced local trade to API:", trade.id);
+            } catch (syncError) {
+              console.error("Failed to sync local trade to API:", syncError);
+            }
+          });
+        }
+
+        // Assign series to trades
+        const tradesWithSeries = assignSeriesToTrades(finalTrades);
+        setTrades(tradesWithSeries);
+        if (onTradeUpdate) {
+          onTradeUpdate(tradesWithSeries);
+        }
+
+        // Always update local storage with our final dataset
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(tradesWithSeries)
+        );
       }
     } catch (error) {
-      console.error("Error loading trades from AWS:", error);
+      console.error("Error loading trades:", error);
 
-      // On API failure, try local storage as fallback
+      // Try local storage as fallback if API fails
       if (user?.email) {
         const storedTrades = localStorage.getItem(`trades_${user.email}`);
         if (storedTrades) {
           try {
             const parsedTrades = JSON.parse(storedTrades);
             console.log(
-              "Using trades from local storage after API failure:",
+              "API failed, using trades from local storage:",
               parsedTrades
             );
-            setTrades(parsedTrades);
+
+            // Assign series to trades from local storage
+            const tradesWithSeries = assignSeriesToTrades(parsedTrades);
+            setTrades(tradesWithSeries);
             if (onTradeUpdate) {
-              onTradeUpdate(parsedTrades);
+              onTradeUpdate(tradesWithSeries);
             }
-          } catch (parseError) {
-            console.error("Error parsing stored trades:", parseError);
+          } catch (error) {
+            console.error("Error parsing stored trades:", error);
             setTrades([]);
           }
         } else {
