@@ -323,6 +323,41 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         tradeData.status = "OPEN" as "OPEN" | "CLOSED" | "EXPIRED";
       }
 
+      // For iron condors with SPX close price, calculate P&L and set exit premium
+      if (
+        tradeData.tradeType === "IRON_CONDOR" &&
+        tradeData.spxClosePrice &&
+        tradeData.status === "CLOSED"
+      ) {
+        const fullTrade = trades.find((t) => t.id === tradeData.id) as Trade;
+        if (fullTrade) {
+          // Check if SPX closed between sell sides (max profit)
+          const isMaxProfitTrade =
+            tradeData.spxClosePrice > fullTrade.strikes.sellPut &&
+            tradeData.spxClosePrice < fullTrade.strikes.sellCall;
+
+          // Set isMaxProfit flag
+          tradeData.isMaxProfit = isMaxProfitTrade;
+
+          // Calculate P&L based on whether it's max profit or not
+          if (isMaxProfitTrade) {
+            // Max profit: full premium received minus fees
+            tradeData.exitPremium = 0.0;
+            tradeData.pnl =
+              fullTrade.entryPremium * fullTrade.contractQuantity * 100 -
+              fullTrade.fees;
+          } else {
+            // Max loss: 5-wide spread minus premium received
+            tradeData.exitPremium = 5.0;
+            tradeData.pnl =
+              (fullTrade.entryPremium - 5.0) *
+                fullTrade.contractQuantity *
+                100 -
+              fullTrade.fees;
+          }
+        }
+      }
+
       // Update local state immediately
       const updatedTrades = trades.map((t: Trade) =>
         t.id === tradeData.id ? ({ ...t, ...tradeData } as Trade) : t
@@ -331,9 +366,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setEditingTrade(null);
 
       // Save to local storage immediately
-      if (user?.email) {
+      if (user?.id) {
         localStorage.setItem(
-          `trades_${user.email}`,
+          `trades_${user.id}`,
           JSON.stringify(updatedTrades)
         );
       }
@@ -350,11 +385,16 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           setTrades(serverUpdatedTrades);
 
           // Update local storage with server data
-          if (user?.email) {
+          if (user?.id) {
             localStorage.setItem(
-              `trades_${user.email}`,
+              `trades_${user.id}`,
               JSON.stringify(serverUpdatedTrades)
             );
+          }
+
+          // Notify parent component if needed
+          if (onTradeUpdate) {
+            onTradeUpdate(serverUpdatedTrades);
           }
         }
       } catch (apiError) {
