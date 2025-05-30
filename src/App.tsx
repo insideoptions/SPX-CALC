@@ -148,7 +148,6 @@ const AppContent: React.FC = () => {
           element={
             <div className="spx-matrix-user">
               <SpxMatrixUser />
-              
             </div>
           }
         />

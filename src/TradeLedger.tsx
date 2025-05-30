@@ -406,10 +406,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
       {/* Trade Form Modal */}
       {showAddTrade && (
-        <div className="modal-overlay">
+        <div
+          className="modal-overlay"
+          onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            // Close modal when clicking outside the content
+            if (e.target === e.currentTarget) {
+              setShowAddTrade(false);
+            }
+          }}
+        >
           <div className="modal-content">
             <TradeForm
-              onSave={addTrade}
+              onSave={(tradeData: Partial<Trade>) => {
+                console.log("Trade form submitted with data:", tradeData);
+                addTrade(tradeData);
+              }}
               onCancel={() => setShowAddTrade(false)}
             />
           </div>

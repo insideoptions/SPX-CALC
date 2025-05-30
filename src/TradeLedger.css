@@ -477,20 +477,20 @@
     align-items: flex-start;
     gap: 1rem;
   }
-
+  
   .trade-ledger-controls {
     flex-direction: column;
     gap: 1rem;
   }
-
+  
   .form-grid {
     grid-template-columns: 1fr;
   }
-
+  
   .form-actions {
     flex-direction: column;
   }
-
+  
   .cancel-button,
   .save-button {
     width: 100%;

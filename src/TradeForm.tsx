@@ -50,6 +50,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Form submitted");
 
     const tradeData: Partial<Trade> = {
       ...trade,
@@ -85,6 +86,8 @@ const TradeForm: React.FC<TradeFormProps> = ({
       tradeData.exitDate = new Date().toISOString();
     }
 
+    // Call the onSave function with the trade data
+    console.log("Saving trade data:", tradeData);
     onSave(tradeData);
   };
 
@@ -116,7 +119,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <input
                 type="date"
                 value={formData.tradeDate}
-                onChange={(e) => handleInputChange("tradeDate", e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  handleInputChange("tradeDate", e.target.value)
+                }
                 required
                 disabled={isClosing}
               />
@@ -367,7 +372,14 @@ const TradeForm: React.FC<TradeFormProps> = ({
           <button type="button" className="cancel-button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" className="save-button">
+          <button
+            type="submit"
+            className="save-button"
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              console.log("Save button clicked");
+              handleSubmit(e as unknown as React.FormEvent);
+            }}
+          >
             {isClosing ? "Close Trade" : trade ? "Update Trade" : "Add Trade"}
           </button>
         </div>
