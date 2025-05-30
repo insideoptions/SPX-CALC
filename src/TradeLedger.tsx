@@ -347,7 +347,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               fullTrade.entryPremium * fullTrade.contractQuantity * 100 -
               fullTrade.fees;
           } else {
-            // Max loss: 5-wide spread minus premium received
+            // Max loss: For a 5-wide spread, if you collect 2.00 premium, you lose 3.00 (5.00 - 2.00)
+            // The total loss is (premium - 5.00) * contracts * 100 - fees
             tradeData.exitPremium = 5.0;
             tradeData.pnl =
               (fullTrade.entryPremium - 5.0) *
@@ -461,16 +462,25 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       return 0;
     }
 
-    // If we have SPX close price and it's between sell sides, it's max profit
-    if (trade.spxClosePrice && isMaxProfit(trade)) {
-      // Max profit is the full premium received minus fees
-      const maxProfit =
-        trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
-      return maxProfit;
+    // For iron condors with SPX close price
+    if (trade.tradeType === "IRON_CONDOR" && trade.spxClosePrice) {
+      if (isMaxProfit(trade)) {
+        // Max profit: full premium received minus fees
+        const maxProfit =
+          trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
+        return maxProfit;
+      } else {
+        // Max loss: For a 5-wide spread, if you collect 2.00 premium, you lose 3.00 (5.00 - 2.00)
+        // The total loss is (premium - 5.00) * contracts * 100 - fees
+        const maxLoss =
+          (trade.entryPremium - 5.0) * trade.contractQuantity * 100 -
+          trade.fees;
+        return maxLoss; // This will be negative
+      }
     }
 
-    // Otherwise calculate based on entry and exit premiums
-    if (trade.exitPremium) {
+    // For other trades or trades without SPX close price, calculate based on entry and exit premiums
+    if (trade.exitPremium !== undefined) {
       const grossPnL =
         (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
       return grossPnL - trade.fees;
