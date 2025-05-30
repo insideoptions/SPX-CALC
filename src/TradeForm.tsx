@@ -92,6 +92,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
   };
 
   const handleInputChange = (field: string, value: any) => {
+    console.log(`Updating field ${field} with value:`, value);
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -373,11 +374,49 @@ const TradeForm: React.FC<TradeFormProps> = ({
             Cancel
           </button>
           <button
-            type="submit"
+            type="button"
             className="save-button"
-            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-              console.log("Save button clicked");
-              handleSubmit(e as unknown as React.FormEvent);
+            onClick={() => {
+              console.log("Save button clicked directly");
+
+              // Create the trade data directly without form submission
+              const tradeData: Partial<Trade> = {
+                ...trade,
+                userId: user?.id || "",
+                userEmail: user?.email || "",
+                tradeDate: formData.tradeDate,
+                entryDate: trade?.entryDate || new Date().toISOString(),
+                level: formData.level,
+                contractQuantity: formData.contractQuantity,
+                entryPremium: formData.entryPremium,
+                exitPremium: formData.exitPremium || undefined,
+                tradeType: formData.tradeType,
+                strikes: {
+                  sellPut: formData.sellPut,
+                  buyPut: formData.buyPut,
+                  sellCall: formData.sellCall,
+                  buyCall: formData.buyCall,
+                },
+                status: isClosing
+                  ? "CLOSED"
+                  : formData.exitPremium > 0
+                  ? "CLOSED"
+                  : "OPEN",
+                pnl: calculatePnL(),
+                fees: formData.fees,
+                notes: formData.notes,
+                isAutoPopulated: false,
+                matrix: formData.matrix,
+                buyingPower: formData.buyingPower,
+              };
+
+              if (isClosing) {
+                tradeData.exitDate = new Date().toISOString();
+              }
+
+              // Call onSave directly
+              console.log("Directly calling onSave with:", tradeData);
+              onSave(tradeData);
             }}
           >
             {isClosing ? "Close Trade" : trade ? "Update Trade" : "Add Trade"}

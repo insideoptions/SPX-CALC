@@ -78,7 +78,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Add a new trade
   const addTrade = async (tradeData: Partial<Trade>) => {
     try {
-      console.log("Adding new trade:", tradeData);
+      console.log("Adding new trade (improved):", tradeData);
       // Ensure status is one of the allowed values
       let status: "OPEN" | "CLOSED" | "EXPIRED" = "OPEN";
       if (
@@ -115,13 +115,29 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         buyingPower: tradeData.buyingPower || "$26,350",
       };
 
+      // Generate a local ID for immediate UI update
+      const localId =
+        Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const localTrade: Trade = {
+        ...(newTrade as any),
+        id: localId,
+      };
+
+      // Update UI immediately
+      setTrades([...trades, localTrade]);
+      setShowAddTrade(false);
+
+      // Then send to API
       const createdTrade = await createTrade(newTrade);
       if (createdTrade) {
-        setTrades([...trades, createdTrade]);
-        setShowAddTrade(false);
+        // Replace local trade with server version
+        setTrades((currentTrades: Trade[]) =>
+          currentTrades.map((t: Trade) => (t.id === localId ? createdTrade : t))
+        );
       }
     } catch (error) {
       console.error("Error adding trade:", error);
+      alert("Failed to add trade. Please try again.");
     }
   };
 
