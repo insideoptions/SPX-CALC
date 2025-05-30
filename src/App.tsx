@@ -56,7 +56,10 @@ const AppHeader: React.FC = () => {
         </NavLink>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+      <div
+        className="user-section"
+        style={{ display: "flex", alignItems: "center", gap: "1rem" }}
+      >
         {/* User profile info */}
         <div
           style={{
