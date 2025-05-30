@@ -52,9 +52,35 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Fetch trades on component mount
   useEffect(() => {
     if (user?.email) {
-      loadTrades();
+      // Try to load from local storage first
+      const storedTrades = localStorage.getItem(`trades_${user.email}`);
+      if (storedTrades) {
+        try {
+          const parsedTrades = JSON.parse(storedTrades);
+          console.log("Loaded trades from local storage:", parsedTrades);
+          setTrades(parsedTrades);
+          if (onTradeUpdate) {
+            onTradeUpdate(parsedTrades);
+          }
+        } catch (error) {
+          console.error("Error parsing stored trades:", error);
+          // If local storage parsing fails, fall back to API
+          loadTrades();
+        }
+      } else {
+        // If no local storage data, load from API
+        loadTrades();
+      }
     }
   }, [user]);
+
+  // Save trades to local storage whenever they change
+  useEffect(() => {
+    if (user?.email && trades.length > 0) {
+      console.log("Saving trades to local storage:", trades);
+      localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
+    }
+  }, [trades, user?.email]);
 
   // Load trades from API
   const loadTrades = async () => {
@@ -124,16 +150,40 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       };
 
       // Update UI immediately
-      setTrades([...trades, localTrade]);
+      const updatedTrades = [...trades, localTrade];
+      setTrades(updatedTrades);
       setShowAddTrade(false);
 
-      // Then send to API
-      const createdTrade = await createTrade(newTrade);
-      if (createdTrade) {
-        // Replace local trade with server version
-        setTrades((currentTrades: Trade[]) =>
-          currentTrades.map((t: Trade) => (t.id === localId ? createdTrade : t))
+      // Save to local storage immediately for persistence
+      if (user?.email) {
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
         );
+      }
+
+      // Then try to send to API
+      try {
+        const createdTrade = await createTrade(newTrade);
+        if (createdTrade) {
+          // Replace local trade with server version
+          const serverUpdatedTrades = trades.map((t: Trade) =>
+            t.id === localId ? createdTrade : t
+          );
+          setTrades(serverUpdatedTrades);
+
+          // Update local storage with server data
+          if (user?.email) {
+            localStorage.setItem(
+              `trades_${user.email}`,
+              JSON.stringify(serverUpdatedTrades)
+            );
+          }
+        }
+      } catch (apiError) {
+        console.error("API error when adding trade:", apiError);
+        // Trade is already saved to local storage, so we don't need to alert the user
+        console.log("Trade was saved locally but not to the server");
       }
     } catch (error) {
       console.error("Error adding trade:", error);
@@ -156,16 +206,48 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         tradeData.status = "OPEN" as "OPEN" | "CLOSED" | "EXPIRED";
       }
 
-      // Cast to Trade type for the API call
-      const updatedTrade = await updateTrade(tradeData as Trade);
-      if (updatedTrade) {
-        setTrades(
-          trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+      // Update local state immediately
+      const updatedTrades = trades.map((t: Trade) =>
+        t.id === tradeData.id ? ({ ...t, ...tradeData } as Trade) : t
+      );
+      setTrades(updatedTrades);
+      setEditingTrade(null);
+
+      // Save to local storage immediately
+      if (user?.email) {
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
         );
-        setEditingTrade(null);
+      }
+
+      // Try to update on the server
+      try {
+        // Cast to Trade type for the API call
+        const updatedTrade = await updateTrade(tradeData as Trade);
+        if (updatedTrade) {
+          // Update with server response
+          const serverUpdatedTrades = trades.map((t: Trade) =>
+            t.id === updatedTrade.id ? updatedTrade : t
+          );
+          setTrades(serverUpdatedTrades);
+
+          // Update local storage with server data
+          if (user?.email) {
+            localStorage.setItem(
+              `trades_${user.email}`,
+              JSON.stringify(serverUpdatedTrades)
+            );
+          }
+        }
+      } catch (apiError) {
+        console.error("API error when updating trade:", apiError);
+        // Trade is already updated locally, so we don't need to alert the user
+        console.log("Trade was updated locally but not on the server");
       }
     } catch (error) {
       console.error("Error updating trade:", error);
+      alert("Failed to update trade. Please try again.");
     }
   };
 
@@ -173,12 +255,33 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const removeTrade = async (tradeId: string) => {
     try {
       console.log("Deleting trade:", tradeId);
-      const success = await deleteTrade(tradeId);
-      if (success) {
-        setTrades(trades.filter((t) => t.id !== tradeId));
+
+      // Remove from local state immediately
+      const updatedTrades = trades.filter((t) => t.id !== tradeId);
+      setTrades(updatedTrades);
+
+      // Update local storage immediately
+      if (user?.email) {
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
+        );
+      }
+
+      // Try to delete on the server
+      try {
+        const success = await deleteTrade(tradeId);
+        if (!success) {
+          console.warn("API returned unsuccessful status when deleting trade");
+        }
+      } catch (apiError) {
+        console.error("API error when deleting trade:", apiError);
+        // Trade is already deleted locally, so we don't need to alert the user
+        console.log("Trade was deleted locally but not on the server");
       }
     } catch (error) {
       console.error("Error deleting trade:", error);
+      alert("Failed to delete trade. Please try again.");
     }
   };
 
