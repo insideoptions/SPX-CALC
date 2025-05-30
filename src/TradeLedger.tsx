@@ -761,8 +761,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         {/* Series header row */}
                         <tr className="series-header">
                           <td colSpan={10} className="series-title">
-                            Series {seriesId.split("_")[2] || ""} (
-                            {seriesTrades.length} trades)
+                            {seriesTrades.length} Trade Series
                           </td>
                           <td
                             className={seriesPnL >= 0 ? "profit" : "loss"}
