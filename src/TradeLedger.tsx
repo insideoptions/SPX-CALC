@@ -32,6 +32,7 @@ export interface Trade {
   buyingPower: string;
   spxClosePrice?: number; // Added SPX close price
   isMaxProfit?: boolean; // Flag to indicate if trade achieved max profit
+  seriesId?: string; // Identifier for grouping trades in the same series
 }
 
 // Props for the component
@@ -50,11 +51,48 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   );
   const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [groupBySeries, setGroupBySeries] = useState<boolean>(true);
 
   // State for SPX close price dialog
   const [showSpxDialog, setShowSpxDialog] = useState(false);
   const [spxClosePrice, setSpxClosePrice] = useState<number | "">("");
   const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
+
+  // Function to identify and assign series to trades
+  const assignSeriesToTrades = (tradesToProcess: Trade[]): Trade[] => {
+    if (!tradesToProcess || tradesToProcess.length === 0) return [];
+
+    // Sort trades by date
+    const sortedTrades = [...tradesToProcess].sort(
+      (a, b) =>
+        new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime()
+    );
+
+    let currentSeriesId = `series_${Date.now()}`;
+    let lastTradeDate: Date | null = null;
+
+    return sortedTrades.map((trade, index) => {
+      const tradeDate = new Date(trade.tradeDate);
+
+      // If this is the first trade or there's a gap of more than 1 day from the last trade,
+      // start a new series
+      if (
+        index === 0 ||
+        !lastTradeDate ||
+        tradeDate.getTime() - lastTradeDate.getTime() > 24 * 60 * 60 * 1000
+      ) {
+        currentSeriesId = `series_${Date.now()}_${index}`;
+      }
+
+      lastTradeDate = tradeDate;
+
+      // Return trade with series ID
+      return {
+        ...trade,
+        seriesId: trade.seriesId || currentSeriesId,
+      };
+    });
+  };
 
   // Fetch trades on component mount
   useEffect(() => {
@@ -94,14 +132,18 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         console.log("Loaded trades from AWS:", data);
 
         if (data && data.length > 0) {
-          setTrades(data);
+          // Assign series to trades
+          const tradesWithSeries = assignSeriesToTrades(data);
+          setTrades(tradesWithSeries);
           if (onTradeUpdate) {
-            onTradeUpdate(data);
+            onTradeUpdate(tradesWithSeries);
           }
 
           // Update local storage with the latest data from AWS
-          localStorage.setItem(`trades_${user.email}`, JSON.stringify(data));
-          console.log("Updated local storage with AWS data");
+          localStorage.setItem(
+            `trades_${user.email}`,
+            JSON.stringify(tradesWithSeries)
+          );
         } else {
           // If no data from API, try local storage as fallback
           const storedTrades = localStorage.getItem(`trades_${user.email}`);
@@ -112,9 +154,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 "Using trades from local storage as fallback:",
                 parsedTrades
               );
-              setTrades(parsedTrades);
+
+              // Assign series to trades from local storage
+              const tradesWithSeries = assignSeriesToTrades(parsedTrades);
+              setTrades(tradesWithSeries);
               if (onTradeUpdate) {
-                onTradeUpdate(parsedTrades);
+                onTradeUpdate(tradesWithSeries);
               }
             } catch (error) {
               console.error("Error parsing stored trades:", error);
@@ -310,10 +355,18 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Update an existing trade
   const updateExistingTrade = async (tradeData: Partial<Trade>) => {
-    if (!tradeData.id) return;
+    if (!user?.email || !tradeData.id) return;
+
+    setLoading(true);
 
     try {
-      console.log("Updating trade:", tradeData);
+      // Find the trade to update
+      const tradeToUpdate = trades.find((t: Trade) => t.id === tradeData.id);
+      if (!tradeToUpdate) {
+        console.error("Trade not found for update");
+        return;
+      }
+
       // Ensure all required properties are present before updating
       if (
         typeof tradeData.status === "string" &&
@@ -329,7 +382,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         tradeData.spxClosePrice &&
         tradeData.status === "CLOSED"
       ) {
-        const fullTrade = trades.find((t) => t.id === tradeData.id) as Trade;
+        const fullTrade = trades.find(
+          (t: Trade) => t.id === tradeData.id
+        ) as Trade;
         if (fullTrade) {
           // Check if SPX closed between sell sides (max profit)
           const isMaxProfitTrade =
@@ -489,40 +544,78 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     return 0;
   };
 
+  // Group trades by series
+  const groupTradesBySeries = (
+    tradesToGroup: Trade[]
+  ): { [key: string]: Trade[] } => {
+    const grouped: { [key: string]: Trade[] } = {};
+
+    tradesToGroup.forEach((trade) => {
+      if (!trade.seriesId) return;
+
+      if (!grouped[trade.seriesId]) {
+        grouped[trade.seriesId] = [];
+      }
+
+      grouped[trade.seriesId].push(trade);
+    });
+
+    return grouped;
+  };
+
+  // Calculate total P&L for a series
+  const calculateSeriesPnL = (seriesTrades: Trade[]): number => {
+    return seriesTrades.reduce(
+      (sum: number, trade: Trade) => sum + (trade.pnl || 0),
+      0
+    );
+  };
+
   // Filter and sort trades
   const filteredAndSortedTrades = trades
-    .filter((trade) => {
+    .filter((trade: Trade) => {
       if (filterStatus === "ALL") return true;
       return trade.status === filterStatus;
     })
-    .sort((a, b) => {
-      let compareValue = 0;
+    .sort((a: Trade, b: Trade) => {
+      let comparison = 0;
 
       switch (sortBy) {
         case "date":
-          compareValue =
+          comparison =
             new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
           break;
         case "level":
-          compareValue =
-            parseInt(a.level.replace("Level ", "")) -
-            parseInt(b.level.replace("Level ", ""));
+          comparison = a.level.localeCompare(b.level);
           break;
         case "pnl":
-          compareValue = (b.pnl || 0) - (a.pnl || 0);
+          comparison = (b.pnl || 0) - (a.pnl || 0);
           break;
+        default:
+          comparison =
+            new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
       }
 
-      return sortOrder === "asc" ? -compareValue : compareValue;
+      return sortOrder === "asc" ? -comparison : comparison;
     });
+
+  // Group trades by series if enabled
+  const groupedTrades = groupBySeries
+    ? groupTradesBySeries(filteredAndSortedTrades)
+    : {};
 
   // Calculate summary statistics
   const calculateStats = () => {
-    const openTrades = trades.filter((t) => t.status === "OPEN").length;
-    const closedTrades = trades.filter((t) => t.status === "CLOSED").length;
-    const totalPnL = trades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
-    const winningTrades = trades.filter((t) => (t.pnl || 0) > 0).length;
-    const losingTrades = trades.filter((t) => (t.pnl || 0) < 0).length;
+    const openTrades = trades.filter((t: Trade) => t.status === "OPEN").length;
+    const closedTrades = trades.filter(
+      (t: Trade) => t.status === "CLOSED"
+    ).length;
+    const totalPnL = trades.reduce(
+      (sum: number, trade: Trade) => sum + (trade.pnl || 0),
+      0
+    );
+    const winningTrades = trades.filter((t: Trade) => (t.pnl || 0) > 0).length;
+    const losingTrades = trades.filter((t: Trade) => (t.pnl || 0) < 0).length;
     const winRate =
       closedTrades > 0
         ? ((winningTrades / closedTrades) * 100).toFixed(1)
@@ -624,6 +717,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             {sortOrder === "asc" ? "↑" : "↓"}
           </button>
         </div>
+
+        <div className="group-toggle">
+          <label>
+            <input
+              type="checkbox"
+              checked={groupBySeries}
+              onChange={() => setGroupBySeries(!groupBySeries)}
+            />
+            Group by Series
+          </label>
+        </div>
       </div>
 
       {/* Trades Table */}
@@ -646,102 +750,241 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredAndSortedTrades.map((trade) => (
-              <tr
-                key={trade.id}
-                className={trade.status === "OPEN" ? "open-trade" : ""}
-              >
-                <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
-                <td>
-                  <span
-                    className={`level-badge level-${trade.level
-                      .toLowerCase()
-                      .replace(" ", "-")}`}
+            {groupBySeries
+              ? // Display trades grouped by series
+                Object.entries(groupedTrades).map(
+                  ([seriesId, seriesTrades]) => {
+                    const seriesPnL = calculateSeriesPnL(seriesTrades);
+
+                    return (
+                      <React.Fragment key={seriesId}>
+                        {/* Series header row */}
+                        <tr className="series-header">
+                          <td colSpan={10} className="series-title">
+                            Series {seriesId.split("_")[2] || ""} (
+                            {seriesTrades.length} trades)
+                          </td>
+                          <td
+                            className={seriesPnL >= 0 ? "profit" : "loss"}
+                            style={{ fontWeight: "bold" }}
+                          >
+                            {seriesPnL.toFixed(2)}
+                          </td>
+                          <td></td>
+                        </tr>
+
+                        {/* Series trades */}
+                        {seriesTrades.map((trade: Trade) => (
+                          <tr
+                            key={trade.id}
+                            className={`series-trade ${
+                              trade.status === "OPEN" ? "open-trade" : ""
+                            }`}
+                          >
+                            <td>
+                              {new Date(trade.tradeDate).toLocaleDateString()}
+                            </td>
+                            <td>
+                              <span
+                                className={`level-badge level-${trade.level
+                                  .toLowerCase()
+                                  .replace(" ", "-")}`}
+                              >
+                                {trade.level}
+                              </span>
+                            </td>
+                            <td>{trade.tradeType.replace("_", " ")}</td>
+                            <td>{trade.contractQuantity}</td>
+                            <td>{trade.strikes?.sellPut || "-"}</td>
+                            <td>{trade.strikes?.sellCall || "-"}</td>
+                            <td>{trade.entryPremium.toFixed(2)}</td>
+                            <td>
+                              {trade.exitPremium !== undefined ||
+                              (trade.isMaxProfit && trade.status === "CLOSED")
+                                ? trade.exitPremium !== undefined
+                                  ? trade.exitPremium.toFixed(2)
+                                  : "0.00"
+                                : "-"}
+                            </td>
+                            <td>
+                              {trade.spxClosePrice ? (
+                                <span
+                                  className={`spx-close ${
+                                    trade.isMaxProfit ? "spx-win" : "spx-loss"
+                                  }`}
+                                >
+                                  {trade.spxClosePrice}
+                                  {trade.tradeType === "IRON_CONDOR" && (
+                                    <span className="spx-indicator">
+                                      {trade.isMaxProfit ? "✓" : "✗"}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                            <td>
+                              <span
+                                className={`status-badge status-${trade.status.toLowerCase()}`}
+                              >
+                                {trade.status}
+                              </span>
+                            </td>
+                            <td
+                              className={
+                                trade.pnl && trade.pnl >= 0 ? "profit" : "loss"
+                              }
+                            >
+                              {trade.pnl !== undefined
+                                ? trade.pnl.toFixed(2)
+                                : "-"}
+                            </td>
+                            <td>
+                              <button
+                                className="action-button edit"
+                                onClick={() => setEditingTrade(trade)}
+                              >
+                                Edit
+                              </button>
+                              {trade.status === "OPEN" && (
+                                <button
+                                  className="action-button close"
+                                  onClick={() => {
+                                    // For iron condors, show SPX close price dialog
+                                    if (trade.tradeType === "IRON_CONDOR") {
+                                      setTradeToClose(trade);
+                                      setSpxClosePrice("");
+                                      setShowSpxDialog(true);
+                                    } else {
+                                      // For other trade types, just close directly
+                                      const tradeToClose: Trade = {
+                                        ...trade,
+                                        status: "CLOSED",
+                                        exitDate: new Date().toISOString(),
+                                        exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
+                                      };
+                                      updateExistingTrade(tradeToClose);
+                                    }
+                                  }}
+                                >
+                                  Close
+                                </button>
+                              )}
+                              <button
+                                className="action-button delete"
+                                onClick={() => removeTrade(trade.id)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  }
+                )
+              : // Display trades without grouping
+                filteredAndSortedTrades.map((trade: Trade) => (
+                  <tr
+                    key={trade.id}
+                    className={trade.status === "OPEN" ? "open-trade" : ""}
                   >
-                    {trade.level}
-                  </span>
-                </td>
-                <td>{trade.tradeType.replace("_", " ")}</td>
-                <td>{trade.contractQuantity}</td>
-                <td>{trade.strikes?.sellPut || "-"}</td>
-                <td>{trade.strikes?.sellCall || "-"}</td>
-                <td>{trade.entryPremium.toFixed(2)}</td>
-                <td>
-                  {trade.exitPremium !== undefined ||
-                  (trade.isMaxProfit && trade.status === "CLOSED")
-                    ? trade.exitPremium !== undefined
-                      ? trade.exitPremium.toFixed(2)
-                      : "0.00"
-                    : "-"}
-                </td>
-                <td>
-                  {trade.spxClosePrice ? (
-                    <span
-                      className={`spx-close ${
-                        trade.isMaxProfit ? "spx-win" : "spx-loss"
-                      }`}
-                    >
-                      {trade.spxClosePrice}
-                      {trade.tradeType === "IRON_CONDOR" && (
-                        <span className="spx-indicator">
-                          {trade.isMaxProfit ? "✓" : "✗"}
+                    <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
+                    <td>
+                      <span
+                        className={`level-badge level-${trade.level
+                          .toLowerCase()
+                          .replace(" ", "-")}`}
+                      >
+                        {trade.level}
+                      </span>
+                    </td>
+                    <td>{trade.tradeType.replace("_", " ")}</td>
+                    <td>{trade.contractQuantity}</td>
+                    <td>{trade.strikes?.sellPut || "-"}</td>
+                    <td>{trade.strikes?.sellCall || "-"}</td>
+                    <td>{trade.entryPremium.toFixed(2)}</td>
+                    <td>
+                      {trade.exitPremium !== undefined ||
+                      (trade.isMaxProfit && trade.status === "CLOSED")
+                        ? trade.exitPremium !== undefined
+                          ? trade.exitPremium.toFixed(2)
+                          : "0.00"
+                        : "-"}
+                    </td>
+                    <td>
+                      {trade.spxClosePrice ? (
+                        <span
+                          className={`spx-close ${
+                            trade.isMaxProfit ? "spx-win" : "spx-loss"
+                          }`}
+                        >
+                          {trade.spxClosePrice}
+                          {trade.tradeType === "IRON_CONDOR" && (
+                            <span className="spx-indicator">
+                              {trade.isMaxProfit ? "✓" : "✗"}
+                            </span>
+                          )}
                         </span>
+                      ) : (
+                        "-"
                       )}
-                    </span>
-                  ) : (
-                    "-"
-                  )}
-                </td>
-                <td>
-                  <span
-                    className={`status-badge status-${trade.status.toLowerCase()}`}
-                  >
-                    {trade.status}
-                  </span>
-                </td>
-                <td className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}>
-                  {trade.pnl !== undefined ? trade.pnl.toFixed(2) : "-"}
-                </td>
-                <td>
-                  <button
-                    className="action-button edit"
-                    onClick={() => setEditingTrade(trade)}
-                  >
-                    Edit
-                  </button>
-                  {trade.status === "OPEN" && (
-                    <button
-                      className="action-button close"
-                      onClick={() => {
-                        // For iron condors, show SPX close price dialog
-                        if (trade.tradeType === "IRON_CONDOR") {
-                          setTradeToClose(trade);
-                          setSpxClosePrice("");
-                          setShowSpxDialog(true);
-                        } else {
-                          // For other trade types, just close directly
-                          const tradeToClose: Trade = {
-                            ...trade,
-                            status: "CLOSED",
-                            exitDate: new Date().toISOString(),
-                            exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
-                          };
-                          updateExistingTrade(tradeToClose);
-                        }
-                      }}
+                    </td>
+                    <td>
+                      <span
+                        className={`status-badge status-${trade.status.toLowerCase()}`}
+                      >
+                        {trade.status}
+                      </span>
+                    </td>
+                    <td
+                      className={
+                        trade.pnl && trade.pnl >= 0 ? "profit" : "loss"
+                      }
                     >
-                      Close
-                    </button>
-                  )}
-                  <button
-                    className="action-button delete"
-                    onClick={() => removeTrade(trade.id)}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
+                      {trade.pnl !== undefined ? trade.pnl.toFixed(2) : "-"}
+                    </td>
+                    <td>
+                      <button
+                        className="action-button edit"
+                        onClick={() => setEditingTrade(trade)}
+                      >
+                        Edit
+                      </button>
+                      {trade.status === "OPEN" && (
+                        <button
+                          className="action-button close"
+                          onClick={() => {
+                            // For iron condors, show SPX close price dialog
+                            if (trade.tradeType === "IRON_CONDOR") {
+                              setTradeToClose(trade);
+                              setSpxClosePrice("");
+                              setShowSpxDialog(true);
+                            } else {
+                              // For other trade types, just close directly
+                              const tradeToClose: Trade = {
+                                ...trade,
+                                status: "CLOSED",
+                                exitDate: new Date().toISOString(),
+                                exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
+                              };
+                              updateExistingTrade(tradeToClose);
+                            }
+                          }}
+                        >
+                          Close
+                        </button>
+                      )}
+                      <button
+                        className="action-button delete"
+                        onClick={() => removeTrade(trade.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
           </tbody>
         </table>
 
