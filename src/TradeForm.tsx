@@ -37,32 +37,54 @@ const TradeForm: React.FC<TradeFormProps> = ({
   const [tradeType, setTradeType] = useState<
     "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD"
   >(initialValues?.tradeType || "IRON_CONDOR");
-  const [sellPut, setSellPut] = useState(
-    initialValues?.strikes.sellPut || 0
-  );
-  const [buyPut, setBuyPut] = useState(
-    initialValues?.strikes.buyPut || 0
-  );
+  const [sellPut, setSellPut] = useState(initialValues?.strikes.sellPut || 0);
+  const [buyPut, setBuyPut] = useState(initialValues?.strikes.buyPut || 0);
   const [sellCall, setSellCall] = useState(
     initialValues?.strikes.sellCall || 0
   );
-  const [buyCall, setBuyCall] = useState(
-    initialValues?.strikes.buyCall || 0
-  );
+  const [buyCall, setBuyCall] = useState(initialValues?.strikes.buyCall || 0);
   const [status, setStatus] = useState<"OPEN" | "CLOSED" | "EXPIRED">(
     initialValues?.status || "OPEN"
   );
   const [fees, setFees] = useState(initialValues?.fees || 0);
   const [notes, setNotes] = useState(initialValues?.notes || "");
   const [matrix, setMatrix] = useState(initialValues?.matrix || "Standard");
-  const [buyingPower, setBuyingPower] = useState(initialValues?.buyingPower || "0");
+  const [buyingPower, setBuyingPower] = useState(
+    initialValues?.buyingPower || "0"
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!user) return;
 
-    const pnl = status !== "OPEN" ? (entryPremium - exitPremium) * contractQuantity * 100 - fees : undefined;
+    // Log for debugging
+    console.log("Form submitted with data:", {
+      tradeDate,
+      entryDate,
+      exitDate,
+      level,
+      contractQuantity,
+      entryPremium,
+      exitPremium,
+      tradeType,
+      strikes: {
+        sellPut,
+        buyPut,
+        sellCall,
+        buyCall,
+      },
+      status,
+      fees,
+      notes,
+      matrix,
+      buyingPower,
+    });
+
+    const pnl =
+      status !== "OPEN"
+        ? (entryPremium - exitPremium) * contractQuantity * 100 - fees
+        : undefined;
 
     const tradeData: Omit<Trade, "id"> = {
       userId: initialValues?.userId || user.id,
@@ -90,6 +112,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
       buyingPower,
     };
 
+    // Call the onSubmit prop function passed from the parent
     onSubmit(tradeData);
   };
 
@@ -153,6 +176,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="contractQuantity"
               value={contractQuantity}
               onChange={(e) => setContractQuantity(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               min="1"
               required
             />
@@ -165,6 +189,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="entryPremium"
               value={entryPremium}
               onChange={(e) => setEntryPremium(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               step="0.01"
               required
             />
@@ -177,6 +202,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="exitPremium"
               value={exitPremium}
               onChange={(e) => setExitPremium(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               step="0.01"
             />
           </div>
@@ -187,7 +213,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="tradeType"
               value={tradeType}
               onChange={(e) =>
-                setTradeType(e.target.value as "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD")
+                setTradeType(
+                  e.target.value as "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD"
+                )
               }
               required
             >
@@ -204,6 +232,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="sellPut"
               value={sellPut}
               onChange={(e) => setSellPut(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               required
             />
           </div>
@@ -215,6 +244,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="buyPut"
               value={buyPut}
               onChange={(e) => setBuyPut(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               required
             />
           </div>
@@ -226,6 +256,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="sellCall"
               value={sellCall}
               onChange={(e) => setSellCall(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               required
             />
           </div>
@@ -237,6 +268,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="buyCall"
               value={buyCall}
               onChange={(e) => setBuyCall(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               required
             />
           </div>
@@ -264,6 +296,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="fees"
               value={fees}
               onChange={(e) => setFees(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               step="0.01"
               required
             />
@@ -287,6 +320,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               id="buyingPower"
               value={buyingPower}
               onChange={(e) => setBuyingPower(e.target.value)}
+              onFocus={(e) => e.target.select()}
               required
             />
           </div>
@@ -304,11 +338,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
 
         <div className="form-actions">
           {onCancel && (
-            <button
-              type="button"
-              className="cancel-button"
-              onClick={onCancel}
-            >
+            <button type="button" className="cancel-button" onClick={onCancel}>
               Cancel
             </button>
           )}

@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import "./TradeLedger.css";
-import { fetchTrades, createTrade, updateTrade, deleteTrade, Trade } from "./api";
+import {
+  fetchTrades,
+  createTrade,
+  updateTrade,
+  deleteTrade,
+  Trade,
+} from "./api";
 import TradeForm from "./TradeForm";
 
 // Props for the component
@@ -25,15 +31,20 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   }, [user]);
 
+  // Debug state changes
+  useEffect(() => {
+    console.log("showAddTrade state changed:", showAddTrade);
+  }, [showAddTrade]);
+
   // Load trades from API
   const loadTrades = async () => {
     if (!user?.email) return;
-    
+
     try {
       setLoading(true);
       const fetchedTrades = await fetchTrades(user.email);
       setTrades(fetchedTrades);
-      
+
       if (onTradeUpdate) {
         onTradeUpdate(fetchedTrades);
       }
@@ -45,24 +56,36 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Add a new trade
-  const addTrade = async (tradeData: Omit<Trade, 'id'>) => {
-    if (!user?.email) return;
-    
+  const addTrade = async (tradeData: Omit<Trade, "id">) => {
+    console.log("addTrade function called with data:", tradeData);
+
+    if (!user?.email) {
+      console.error("No user email found");
+      return;
+    }
+
     try {
+      console.log("Preparing to create trade with user:", user);
       const newTrade = {
         ...tradeData,
         userId: user.id,
-        userEmail: user.email
+        userEmail: user.email,
       };
-      
+
+      console.log("Calling createTrade API with:", newTrade);
       const createdTrade = await createTrade(newTrade);
+      console.log("API response:", createdTrade);
+
       if (createdTrade) {
+        console.log("Trade created successfully, updating state");
         setTrades([...trades, createdTrade]);
         setShowAddTrade(false);
-        
+
         if (onTradeUpdate) {
           onTradeUpdate([...trades, createdTrade]);
         }
+      } else {
+        console.error("Failed to create trade - no response from API");
       }
     } catch (error) {
       console.error("Error adding trade:", error);
@@ -71,15 +94,24 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Update an existing trade
   const updateExistingTrade = async (tradeData: Trade) => {
+    console.log("updateExistingTrade called with:", tradeData);
     try {
       const updatedTrade = await updateTrade(tradeData);
+      console.log("API response for update:", updatedTrade);
+
       if (updatedTrade) {
-        setTrades(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+        setTrades(
+          trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+        );
         setEditingTrade(null);
-        
+
         if (onTradeUpdate) {
-          onTradeUpdate(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+          onTradeUpdate(
+            trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+          );
         }
+      } else {
+        console.error("Failed to update trade - no response from API");
       }
     } catch (error) {
       console.error("Error updating trade:", error);
@@ -89,13 +121,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Delete a trade
   const removeTrade = async (tradeId: string) => {
     if (!user?.email) return;
-    
+
     try {
       const success = await deleteTrade(tradeId, user.email);
       if (success) {
-        const updatedTrades = trades.filter(t => t.id !== tradeId);
+        const updatedTrades = trades.filter((t) => t.id !== tradeId);
         setTrades(updatedTrades);
-        
+
         if (onTradeUpdate) {
           onTradeUpdate(updatedTrades);
         }
@@ -145,9 +177,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     const winningTrades = trades.filter((t) => (t.pnl || 0) > 0).length;
     const losingTrades = trades.filter((t) => (t.pnl || 0) < 0).length;
     const winRate =
-      totalTrades > 0
-        ? ((winningTrades / totalTrades) * 100).toFixed(1)
-        : "0";
+      totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : "0";
 
     return {
       totalTrades,
@@ -225,9 +255,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </select>
           <button
             className="sort-order-button"
-            onClick={() =>
-              setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-            }
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
           >
             {sortOrder === "asc" ? "↑" : "↓"}
           </button>
@@ -238,10 +266,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {sortedTrades.length > 0 ? (
         <div className="trade-list">
           {sortedTrades.map((trade) => (
-            <div
-              key={trade.id}
-              className="trade-card"
-            >
+            <div key={trade.id} className="trade-card">
               <div className="trade-card-header">
                 <div className="trade-date">
                   {new Date(trade.tradeDate).toLocaleDateString()}
@@ -334,7 +359,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               onSubmit={(tradeData) => {
                 updateExistingTrade({
                   ...tradeData,
-                  id: editingTrade.id
+                  id: editingTrade.id,
                 });
               }}
               initialValues={editingTrade}
