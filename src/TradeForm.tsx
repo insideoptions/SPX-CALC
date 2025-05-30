@@ -324,32 +324,6 @@ const TradeForm: React.FC<TradeFormProps> = ({
                     required={isClosing && formData.tradeType !== "IRON_CONDOR"}
                   />
                 </div>
-
-                {formData.tradeType === "IRON_CONDOR" && (
-                  <div className="form-group">
-                    <label>SPX Close Price</label>
-                    <input
-                      type="number"
-                      value={formData.spxClosePrice || ""}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        handleInputChange(
-                          "spxClosePrice",
-                          e.target.value === "" ? 0 : parseFloat(e.target.value)
-                        )
-                      }
-                      step="0.01"
-                      min="0"
-                      placeholder="Enter SPX closing price"
-                      required={
-                        isClosing && formData.tradeType === "IRON_CONDOR"
-                      }
-                    />
-                    <small className="form-helper-text">
-                      If SPX closes between {formData.sellPut} and{" "}
-                      {formData.sellCall}, this trade is a 100% winner.
-                    </small>
-                  </div>
-                )}
               </>
             )}
 
