@@ -90,6 +90,20 @@ const TradeForm: React.FC<TradeFormProps> = ({
       formData.spxClosePrice > formData.sellPut &&
       formData.spxClosePrice < formData.sellCall;
 
+    // For iron condors with SPX close price, automatically set exit premium
+    // If it's a win (SPX between sell strikes), exit premium is 0 (kept all premium)
+    // If it's a loss (SPX outside sell strikes), exit premium is max loss (5.00)
+    let exitPremium = formData.exitPremium;
+    if (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0) {
+      exitPremium = isMaxProfit ? 0 : 5.0;
+    }
+
+    // Determine if the trade should be closed
+    const shouldClose =
+      isClosing ||
+      formData.exitPremium > 0 ||
+      (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0);
+
     const tradeData: Partial<Trade> = {
       ...trade,
       userId: user?.id || "",
@@ -99,7 +113,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
       level: formData.level,
       contractQuantity: formData.contractQuantity,
       entryPremium: formData.entryPremium,
-      exitPremium: formData.exitPremium || undefined,
+      exitPremium: shouldClose ? exitPremium : undefined,
       tradeType: formData.tradeType,
       strikes: {
         sellPut: formData.sellPut,
@@ -107,11 +121,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
         sellCall: formData.sellCall,
         buyCall: formData.buyCall,
       },
-      status: isClosing
-        ? "CLOSED"
-        : formData.exitPremium > 0 || formData.spxClosePrice > 0
-        ? "CLOSED"
-        : "OPEN",
+      status: shouldClose ? "CLOSED" : "OPEN",
       pnl: calculatePnL(),
       fees: formData.fees,
       notes: formData.notes,
@@ -134,10 +144,33 @@ const TradeForm: React.FC<TradeFormProps> = ({
 
   const handleInputChange = (field: string, value: any) => {
     console.log(`Updating field ${field} with value:`, value);
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+
+    // If updating SPX close price for an iron condor, automatically update other fields
+    if (
+      field === "spxClosePrice" &&
+      value > 0 &&
+      formData.tradeType === "IRON_CONDOR"
+    ) {
+      const isMaxProfit = value > formData.sellPut && value < formData.sellCall;
+
+      // For iron condors with SPX close price, automatically set exit premium
+      // If it's a win (SPX between sell strikes), exit premium is 0 (kept all premium)
+      // If it's a loss (SPX outside sell strikes), exit premium is max loss (5.00)
+      const exitPremium = isMaxProfit ? 0 : 5.0;
+
+      setFormData((prev: typeof formData) => ({
+        ...prev,
+        [field]: value,
+        exitPremium: exitPremium,
+        // Automatically set status to CLOSED when SPX close price is entered
+        status: "CLOSED",
+      }));
+    } else {
+      setFormData((prev: typeof formData) => ({
+        ...prev,
+        [field]: value,
+      }));
+    }
   };
 
   return (
