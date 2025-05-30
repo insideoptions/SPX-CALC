@@ -30,6 +30,8 @@ export interface Trade {
   isAutoPopulated: boolean;
   matrix: string;
   buyingPower: string;
+  spxClosePrice?: number; // Added SPX close price
+  isMaxProfit?: boolean; // Flag to indicate if trade achieved max profit
 }
 
 // Props for the component
@@ -48,6 +50,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   );
   const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // State for SPX close price dialog
+  const [showSpxDialog, setShowSpxDialog] = useState(false);
+  const [spxClosePrice, setSpxClosePrice] = useState<number | "">("");
+  const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
 
   // Fetch trades on component mount
   useEffect(() => {
@@ -395,15 +402,41 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
+  // Check if SPX closed between sell sides (max profit scenario)
+  const isMaxProfit = (trade: Trade): boolean => {
+    if (!trade.spxClosePrice || trade.tradeType !== "IRON_CONDOR") {
+      return false;
+    }
+
+    // Check if SPX closed between the two sell sides
+    return (
+      trade.spxClosePrice > trade.strikes.sellPut &&
+      trade.spxClosePrice < trade.strikes.sellCall
+    );
+  };
+
   // Calculate P&L for a trade
   const calculatePnL = (trade: Trade): number => {
-    if (trade.status === "OPEN" || !trade.exitPremium) {
+    if (trade.status === "OPEN") {
       return 0;
     }
 
-    const grossPnL =
-      (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
-    return grossPnL - trade.fees;
+    // If we have SPX close price and it's between sell sides, it's max profit
+    if (trade.spxClosePrice && isMaxProfit(trade)) {
+      // Max profit is the full premium received minus fees
+      const maxProfit =
+        trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
+      return maxProfit;
+    }
+
+    // Otherwise calculate based on entry and exit premiums
+    if (trade.exitPremium) {
+      const grossPnL =
+        (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
+      return grossPnL - trade.fees;
+    }
+
+    return 0;
   };
 
   // Filter and sort trades
@@ -606,15 +639,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                     <button
                       className="action-button close"
                       onClick={() => {
-                        // Create a copy of the trade with updated status
-                        const tradeToClose: Trade = {
-                          ...trade,
-                          status: "CLOSED",
-                          exitDate: new Date().toISOString(),
-                          exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
-                        };
-                        // Directly update the trade instead of just setting it for editing
-                        updateExistingTrade(tradeToClose);
+                        // For iron condors, show SPX close price dialog
+                        if (trade.tradeType === "IRON_CONDOR") {
+                          setTradeToClose(trade);
+                          setSpxClosePrice("");
+                          setShowSpxDialog(true);
+                        } else {
+                          // For other trade types, just close directly
+                          const tradeToClose: Trade = {
+                            ...trade,
+                            status: "CLOSED",
+                            exitDate: new Date().toISOString(),
+                            exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
+                          };
+                          updateExistingTrade(tradeToClose);
+                        }
                       }}
                     >
                       Close
@@ -723,6 +762,128 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 editingTrade.status === "CLOSED" && !editingTrade.exitDate
               }
             />
+          </div>
+        </div>
+      )}
+
+      {/* SPX Close Price Dialog */}
+      {showSpxDialog && tradeToClose && (
+        <div className="modal-overlay">
+          <div
+            className="modal-content"
+            style={{ maxWidth: "500px", padding: "30px" }}
+          >
+            <div className="trade-form-header">
+              <h3>Enter SPX Close Price</h3>
+              <button
+                className="close-button"
+                onClick={() => setShowSpxDialog(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: "20px" }}>
+              <p style={{ marginBottom: "15px" }}>
+                Enter the SPX close price to determine if this iron condor
+                achieved maximum profit.
+              </p>
+
+              <div style={{ marginBottom: "15px" }}>
+                <p style={{ marginBottom: "10px", fontWeight: "bold" }}>
+                  Trade Details:
+                </p>
+                <p>Sell Put: {tradeToClose.strikes.sellPut}</p>
+                <p>Sell Call: {tradeToClose.strikes.sellCall}</p>
+                <p>Entry Premium: ${tradeToClose.entryPremium.toFixed(2)}</p>
+                <p>Contracts: {tradeToClose.contractQuantity}</p>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "5px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  SPX Close Price:
+                </label>
+                <input
+                  type="number"
+                  value={spxClosePrice}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSpxClosePrice(
+                      e.target.value === "" ? "" : parseFloat(e.target.value)
+                    )
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    fontSize: "16px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                  }}
+                  placeholder="Enter SPX close price"
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <button
+                  onClick={() => setShowSpxDialog(false)}
+                  style={{
+                    padding: "10px 20px",
+                    backgroundColor: "#f3f4f6",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (spxClosePrice !== "") {
+                      // Check if SPX closed between sell sides
+                      const isMaxProfitAchieved =
+                        spxClosePrice > tradeToClose.strikes.sellPut &&
+                        spxClosePrice < tradeToClose.strikes.sellCall;
+
+                      // Create a copy of the trade with updated status and SPX close price
+                      const updatedTrade: Trade = {
+                        ...tradeToClose,
+                        status: "CLOSED",
+                        exitDate: new Date().toISOString(),
+                        spxClosePrice: spxClosePrice as number,
+                        isMaxProfit: isMaxProfitAchieved,
+                        // If max profit, exit premium is 0 (kept all premium)
+                        // Otherwise, use existing exit premium or default to half the entry premium
+                        exitPremium: isMaxProfitAchieved
+                          ? 0
+                          : tradeToClose.exitPremium ||
+                            tradeToClose.entryPremium / 2,
+                      };
+
+                      // Update the trade
+                      updateExistingTrade(updatedTrade);
+                      setShowSpxDialog(false);
+                    }
+                  }}
+                  disabled={spxClosePrice === ""}
+                  style={{
+                    padding: "10px 20px",
+                    backgroundColor: spxClosePrice === "" ? "#ccc" : "#6366f1",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: spxClosePrice === "" ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Close Trade
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
