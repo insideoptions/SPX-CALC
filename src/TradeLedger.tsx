@@ -286,6 +286,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         isAutoPopulated: false,
         matrix: tradeData.matrix || "standard",
         buyingPower: tradeData.buyingPower || "$26,350",
+        spxClosePrice: tradeData.spxClosePrice,
+        isMaxProfit: tradeData.isMaxProfit,
       };
 
       // Close the modal immediately for better UX
@@ -294,7 +296,28 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       // Show loading indicator
       setLoading(true);
 
-      // First try to send to AWS API
+      // Generate a local ID for the trade in case API fails
+      const localId =
+        Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const localTrade: Trade = {
+        ...(newTrade as any),
+        id: localId,
+      };
+
+      // First add to local storage immediately to ensure we don't lose the trade
+      if (user?.email) {
+        const updatedLocalTrades = [...trades, localTrade];
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedLocalTrades)
+        );
+        console.log("Saved trade to local storage as immediate backup");
+
+        // Update UI immediately for better UX
+        setTrades(updatedLocalTrades);
+      }
+
+      // Then try to send to AWS API
       console.log("Sending trade to AWS database...");
       const createdTrade = await createTrade(newTrade);
 
@@ -304,11 +327,19 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           createdTrade
         );
 
-        // Update state with the new trade from the server
-        const updatedTrades = [...trades, createdTrade];
+        // Replace the local trade with the server-generated one
+        const updatedTrades = trades.map((t: Trade) =>
+          t.id === localTrade.id ? createdTrade : t
+        );
+
+        // If the local trade wasn't found (unlikely), add the server one
+        if (!updatedTrades.some((t: Trade) => t.id === createdTrade.id)) {
+          updatedTrades.push(createdTrade);
+        }
+
         setTrades(updatedTrades);
 
-        // Update local storage with the latest data including the server-generated trade
+        // Update local storage with the server-generated trade
         if (user?.email) {
           localStorage.setItem(
             `trades_${user.email}`,
@@ -318,33 +349,45 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         }
 
         // Reload trades from server to ensure we have the latest data
-        loadTrades();
+        // This is done asynchronously to not block the UI
+        setTimeout(() => {
+          loadTrades();
+        }, 1000);
       } else {
-        // API call failed or returned null, use local fallback
+        // API call failed, but we already saved to local storage
         console.warn(
           "AWS database did not return a created trade, using local fallback"
         );
+        // We already added the trade to local storage and UI above
 
-        // Generate a local ID for the trade
-        const localId =
-          Date.now().toString(36) + Math.random().toString(36).substring(2);
-        const localTrade: Trade = {
-          ...(newTrade as any),
-          id: localId,
+        // Set up a retry mechanism to sync with AWS later
+        const retrySync = async () => {
+          try {
+            console.log("Retrying to sync local trade with AWS:", localTrade);
+            const retryCreatedTrade = await createTrade(newTrade);
+            if (retryCreatedTrade) {
+              console.log("Successfully synced local trade to AWS on retry");
+              // Update the trades list with the server version
+              const updatedTrades = trades.map((t: Trade) =>
+                t.id === localTrade.id ? retryCreatedTrade : t
+              );
+              setTrades(updatedTrades);
+
+              // Update local storage
+              if (user?.email) {
+                localStorage.setItem(
+                  `trades_${user.email}`,
+                  JSON.stringify(updatedTrades)
+                );
+              }
+            }
+          } catch (retryError) {
+            console.error("Retry sync failed:", retryError);
+          }
         };
 
-        // Update UI with local version
-        const updatedTrades = [...trades, localTrade];
-        setTrades(updatedTrades);
-
-        // Save to local storage for persistence
-        if (user?.email) {
-          localStorage.setItem(
-            `trades_${user.email}`,
-            JSON.stringify(updatedTrades)
-          );
-          console.log("Saved trade to local storage as fallback");
-        }
+        // Try to sync again after a delay
+        setTimeout(retrySync, 5000);
       }
     } catch (error) {
       console.error("Error adding trade:", error);

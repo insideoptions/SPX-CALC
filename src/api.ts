@@ -12,8 +12,19 @@ const API_URL = "https://woitixbcei.execute-api.us-east-1.amazonaws.com/prod";
 export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
   try {
     console.log("Fetching trades for user:", userEmail);
+
+    // Add a cache-busting parameter to prevent browser caching
+    const cacheBuster = new Date().getTime();
     const response = await fetch(
-      `${API_URL}/trades?userEmail=${encodeURIComponent(userEmail)}`
+      `${API_URL}/trades?userEmail=${encodeURIComponent(
+        userEmail
+      )}&_cb=${cacheBuster}`,
+      {
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      }
     );
 
     if (!response.ok) {
