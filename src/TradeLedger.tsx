@@ -552,6 +552,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               <th>Level</th>
               <th>Type</th>
               <th>Contracts</th>
+              <th>Sell Put</th>
+              <th>Sell Call</th>
               <th>Entry</th>
               <th>Exit</th>
               <th>Status</th>
@@ -577,6 +579,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 </td>
                 <td>{trade.tradeType.replace("_", " ")}</td>
                 <td>{trade.contractQuantity}</td>
+                <td>{trade.strikes?.sellPut || "-"}</td>
+                <td>{trade.strikes?.sellCall || "-"}</td>
                 <td>${trade.entryPremium.toFixed(2)}</td>
                 <td>
                   {trade.exitPremium ? `$${trade.exitPremium.toFixed(2)}` : "-"}
@@ -607,8 +611,10 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                           ...trade,
                           status: "CLOSED",
                           exitDate: new Date().toISOString(),
+                          exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
                         };
-                        setEditingTrade(tradeToClose);
+                        // Directly update the trade instead of just setting it for editing
+                        updateExistingTrade(tradeToClose);
                       }}
                     >
                       Close
