@@ -62,7 +62,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setLoading(true);
       if (user?.email) {
         const data = await fetchTrades(user.email);
-        console.log('Loaded trades:', data);
+        console.log("Loaded trades:", data);
         setTrades(data);
         if (onTradeUpdate) {
           onTradeUpdate(data);
@@ -74,82 +74,95 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setLoading(false);
     }
   };
-  
+
   // Add a new trade
   const addTrade = async (tradeData: Partial<Trade>) => {
     try {
-      console.log('Adding new trade:', tradeData);
+      console.log("Adding new trade:", tradeData);
       // Ensure status is one of the allowed values
       let status: "OPEN" | "CLOSED" | "EXPIRED" = "OPEN";
-      if (tradeData.status && ['OPEN', 'CLOSED', 'EXPIRED'].includes(tradeData.status as string)) {
+      if (
+        tradeData.status &&
+        ["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
+      ) {
         status = tradeData.status as "OPEN" | "CLOSED" | "EXPIRED";
       }
-      
+
       // Create a properly typed new trade object
-      const newTrade: Omit<Trade, 'id'> = {
-        userId: user?.id || '',
-        userEmail: user?.email || '',
-        tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
+      const newTrade: Omit<Trade, "id"> = {
+        userId: user?.id || "",
+        userEmail: user?.email || "",
+        tradeDate:
+          tradeData.tradeDate || new Date().toISOString().split("T")[0],
         entryDate: new Date().toISOString(),
-        level: tradeData.level || 'Level 2',
+        level: tradeData.level || "Level 2",
         contractQuantity: tradeData.contractQuantity || 1,
         entryPremium: tradeData.entryPremium || 0,
         exitPremium: tradeData.exitPremium,
-        tradeType: tradeData.tradeType || 'IRON_CONDOR',
-        strikes: tradeData.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+        tradeType: tradeData.tradeType || "IRON_CONDOR",
+        strikes: tradeData.strikes || {
+          sellPut: 0,
+          buyPut: 0,
+          sellCall: 0,
+          buyCall: 0,
+        },
         status: status,
         pnl: tradeData.pnl,
         fees: tradeData.fees || 6.56,
         notes: tradeData.notes,
         isAutoPopulated: false,
-        matrix: tradeData.matrix || 'standard',
-        buyingPower: tradeData.buyingPower || '$26,350',
+        matrix: tradeData.matrix || "standard",
+        buyingPower: tradeData.buyingPower || "$26,350",
       };
-      
+
       const createdTrade = await createTrade(newTrade);
       if (createdTrade) {
         setTrades([...trades, createdTrade]);
         setShowAddTrade(false);
       }
     } catch (error) {
-      console.error('Error adding trade:', error);
+      console.error("Error adding trade:", error);
     }
   };
-  
+
   // Update an existing trade
   const updateExistingTrade = async (tradeData: Partial<Trade>) => {
     if (!tradeData.id) return;
-    
+
     try {
-      console.log('Updating trade:', tradeData);
+      console.log("Updating trade:", tradeData);
       // Ensure all required properties are present before updating
-      if (typeof tradeData.status === 'string' && 
-          !['OPEN', 'CLOSED', 'EXPIRED'].includes(tradeData.status as string)) {
+      if (
+        typeof tradeData.status === "string" &&
+        !["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
+      ) {
         // Fix any invalid status values
-        tradeData.status = 'OPEN' as 'OPEN' | 'CLOSED' | 'EXPIRED';
+        tradeData.status = "OPEN" as "OPEN" | "CLOSED" | "EXPIRED";
       }
-      
+
       // Cast to Trade type for the API call
       const updatedTrade = await updateTrade(tradeData as Trade);
       if (updatedTrade) {
-        setTrades(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
+        setTrades(
+          trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+        );
         setEditingTrade(null);
       }
     } catch (error) {
-      console.error('Error updating trade:', error);
+      console.error("Error updating trade:", error);
     }
   };
-  
+
   // Delete a trade
   const removeTrade = async (tradeId: string) => {
     try {
-      console.log('Deleting trade:', tradeId);
+      console.log("Deleting trade:", tradeId);
       const success = await deleteTrade(tradeId);
       if (success) {
-        setTrades(trades.filter(t => t.id !== tradeId));
+        setTrades(trades.filter((t) => t.id !== tradeId));
       }
     } catch (error) {
-      console.error('Error deleting trade:', error);
+      console.error("Error deleting trade:", error);
     }
   };
 
@@ -268,7 +281,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <label>Filter:</label>
           <select
             value={filterStatus}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value as "ALL" | "OPEN" | "CLOSED")}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFilterStatus(e.target.value as "ALL" | "OPEN" | "CLOSED")
+            }
             className="filter-select"
           >
             <option value="ALL">All Trades</option>
@@ -281,7 +296,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <label>Sort by:</label>
           <select
             value={sortBy}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value as "date" | "level" | "pnl")}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSortBy(e.target.value as "date" | "level" | "pnl")
+            }
             className="sort-select"
           >
             <option value="date">Date</option>
@@ -360,7 +377,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         const tradeToClose: Trade = {
                           ...trade,
                           status: "CLOSED",
-                          exitDate: new Date().toISOString()
+                          exitDate: new Date().toISOString(),
                         };
                         setEditingTrade(tradeToClose);
                       }}
@@ -386,7 +403,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </div>
         )}
       </div>
-      
+
       {/* Trade Form Modal */}
       {showAddTrade && (
         <div className="modal-overlay">
@@ -398,7 +415,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </div>
         </div>
       )}
-      
+
       {/* Edit Trade Modal */}
       {editingTrade && (
         <div className="modal-overlay">
@@ -407,7 +424,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               trade={editingTrade}
               onSave={updateExistingTrade}
               onCancel={() => setEditingTrade(null)}
-              isClosing={editingTrade.status === "CLOSED" && !editingTrade.exitDate}
+              isClosing={
+                editingTrade.status === "CLOSED" && !editingTrade.exitDate
+              }
             />
           </div>
         </div>
@@ -463,15 +482,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             <div className="trade-card-actions">
               <button onClick={() => setEditingTrade(trade)}>Edit</button>
               {trade.status === "OPEN" && (
-                <button onClick={() => {
-                  // Create a properly typed trade object for closing
-                  const tradeToClose: Trade = {
-                    ...trade,
-                    status: "CLOSED",
-                    exitDate: new Date().toISOString()
-                  };
-                  setEditingTrade(tradeToClose);
-                }}>
+                <button
+                  onClick={() => {
+                    // Create a properly typed trade object for closing
+                    const tradeToClose: Trade = {
+                      ...trade,
+                      status: "CLOSED",
+                      exitDate: new Date().toISOString(),
+                    };
+                    setEditingTrade(tradeToClose);
+                  }}
+                >
                   Close Trade
                 </button>
               )}
