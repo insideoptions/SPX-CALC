@@ -96,9 +96,8 @@ const TradeForm: React.FC<TradeFormProps> = ({
   };
 
   return (
-    <div className="trade-form-overlay">
-      <div className="trade-form-container">
-        <div className="trade-form-header">
+    <div className="trade-form-container">
+      <div className="trade-form-header">
           <h3>
             {isClosing ? "Close Trade" : trade ? "Edit Trade" : "Add New Trade"}
           </h3>
@@ -386,7 +385,6 @@ const TradeForm: React.FC<TradeFormProps> = ({
             </button>
           </div>
         </form>
-      </div>
     </div>
   );
 };
