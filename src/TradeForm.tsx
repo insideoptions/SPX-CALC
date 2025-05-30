@@ -56,7 +56,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
         formData.spxClosePrice < formData.sellCall;
 
       if (isMaxProfit) {
-        // Max profit: keep all premium
+        // Max profit: keep all premium (exit premium is 0.00)
         const maxProfit =
           formData.entryPremium * formData.contractQuantity * 100 -
           formData.fees;
@@ -91,11 +91,11 @@ const TradeForm: React.FC<TradeFormProps> = ({
       formData.spxClosePrice < formData.sellCall;
 
     // For iron condors with SPX close price, automatically set exit premium
-    // If it's a win (SPX between sell strikes), exit premium is 0 (kept all premium)
+    // If it's a win (SPX between sell strikes), exit premium is 0.00 (kept all premium)
     // If it's a loss (SPX outside sell strikes), exit premium is max loss (5.00)
     let exitPremium = formData.exitPremium;
     if (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0) {
-      exitPremium = isMaxProfit ? 0 : 5.0;
+      exitPremium = isMaxProfit ? 0.0 : 5.0;
     }
 
     // Determine if the trade should be closed
@@ -154,9 +154,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
       const isMaxProfit = value > formData.sellPut && value < formData.sellCall;
 
       // For iron condors with SPX close price, automatically set exit premium
-      // If it's a win (SPX between sell strikes), exit premium is 0 (kept all premium)
+      // If it's a win (SPX between sell strikes), exit premium is 0.00 (kept all premium)
       // If it's a loss (SPX outside sell strikes), exit premium is max loss (5.00)
-      const exitPremium = isMaxProfit ? 0 : 5.0;
+      const exitPremium = isMaxProfit ? 0.0 : 5.0;
 
       setFormData((prev: typeof formData) => ({
         ...prev,
