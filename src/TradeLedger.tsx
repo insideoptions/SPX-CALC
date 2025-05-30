@@ -420,18 +420,20 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         )}
       </div>
 
-      {/* Trade Form Modal */}
+      {/* Trade Form Modal - Simplified Version */}
       {showAddTrade && (
-        <div
-          className="modal-overlay"
-          onClick={(e: React.MouseEvent<HTMLDivElement>) => {
-            // Close modal when clicking outside the content
-            if (e.target === e.currentTarget) {
-              setShowAddTrade(false);
-            }
-          }}
-        >
+        <div className="modal-overlay">
           <div className="modal-content">
+            <div className="trade-form-header">
+              <h3>Add New Trade</h3>
+              <button
+                className="close-button"
+                onClick={() => setShowAddTrade(false)}
+              >
+                ×
+              </button>
+            </div>
+
             <TradeForm
               onSave={(tradeData: Partial<Trade>) => {
                 console.log("Trade form submitted with data:", tradeData);
@@ -439,6 +441,53 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               }}
               onCancel={() => setShowAddTrade(false)}
             />
+
+            {/* Emergency Add Button - Direct handler outside the form */}
+            <div
+              style={{
+                padding: "20px",
+                textAlign: "center",
+                borderTop: "1px solid #eee",
+                marginTop: "20px",
+              }}
+            >
+              <button
+                style={{
+                  padding: "10px 20px",
+                  backgroundColor: "#4CAF50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                }}
+                onClick={() => {
+                  console.log("Emergency add button clicked");
+                  // Create a minimal trade
+                  const minimalTrade: Partial<Trade> = {
+                    tradeDate: new Date().toISOString().split("T")[0],
+                    level: "Level 2",
+                    contractQuantity: 1,
+                    entryPremium: 1.0,
+                    tradeType: "IRON_CONDOR",
+                    strikes: {
+                      buyPut: 4900,
+                      sellPut: 4950,
+                      sellCall: 5000,
+                      buyCall: 5050,
+                    },
+                    status: "OPEN",
+                    fees: 6.56,
+                    notes: "Added via emergency button",
+                    matrix: "standard",
+                    buyingPower: "$26,350",
+                  };
+                  addTrade(minimalTrade);
+                }}
+              >
+                Emergency Add Trade
+              </button>
+            </div>
           </div>
         </div>
       )}
