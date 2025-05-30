@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import "./TradeLedger.css";
-import {
-  fetchTrades,
-  createTrade,
-  updateTrade,
-  deleteTrade,
-  Trade,
-} from "./api";
+import { fetchTrades, createTrade, updateTrade, deleteTrade, Trade } from "./api";
 import TradeForm from "./TradeForm";
 
 // Props for the component
@@ -21,9 +15,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [showAddTrade, setShowAddTrade] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "OPEN" | "CLOSED">(
-    "ALL"
-  );
   const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -37,12 +28,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Load trades from API
   const loadTrades = async () => {
     if (!user?.email) return;
-
+    
     try {
       setLoading(true);
       const fetchedTrades = await fetchTrades(user.email);
       setTrades(fetchedTrades);
-
+      
       if (onTradeUpdate) {
         onTradeUpdate(fetchedTrades);
       }
@@ -54,21 +45,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Add a new trade
-  const addTrade = async (tradeData: Omit<Trade, "id">) => {
+  const addTrade = async (tradeData: Omit<Trade, 'id'>) => {
     if (!user?.email) return;
-
+    
     try {
       const newTrade = {
         ...tradeData,
         userId: user.id,
-        userEmail: user.email,
+        userEmail: user.email
       };
-
+      
       const createdTrade = await createTrade(newTrade);
       if (createdTrade) {
         setTrades([...trades, createdTrade]);
         setShowAddTrade(false);
-
+        
         if (onTradeUpdate) {
           onTradeUpdate([...trades, createdTrade]);
         }
@@ -83,15 +74,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     try {
       const updatedTrade = await updateTrade(tradeData);
       if (updatedTrade) {
-        setTrades(
-          trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
-        );
+        setTrades(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
         setEditingTrade(null);
-
+        
         if (onTradeUpdate) {
-          onTradeUpdate(
-            trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
-          );
+          onTradeUpdate(trades.map(t => t.id === updatedTrade.id ? updatedTrade : t));
         }
       }
     } catch (error) {
@@ -102,13 +89,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Delete a trade
   const removeTrade = async (tradeId: string) => {
     if (!user?.email) return;
-
+    
     try {
       const success = await deleteTrade(tradeId, user.email);
       if (success) {
-        const updatedTrades = trades.filter((t) => t.id !== tradeId);
+        const updatedTrades = trades.filter(t => t.id !== tradeId);
         setTrades(updatedTrades);
-
+        
         if (onTradeUpdate) {
           onTradeUpdate(updatedTrades);
         }
@@ -129,48 +116,41 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     return grossPnL - trade.fees;
   };
 
-  // Filter and sort trades
-  const filteredAndSortedTrades = trades
-    .filter((trade) => {
-      if (filterStatus === "ALL") return true;
-      return trade.status === filterStatus;
-    })
-    .sort((a, b) => {
-      let compareValue = 0;
+  // Sort trades
+  const sortedTrades = [...trades].sort((a, b) => {
+    let compareValue = 0;
 
-      switch (sortBy) {
-        case "date":
-          compareValue =
-            new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
-          break;
-        case "level":
-          compareValue =
-            parseInt(a.level.replace("Level ", "")) -
-            parseInt(b.level.replace("Level ", ""));
-          break;
-        case "pnl":
-          compareValue = (b.pnl || 0) - (a.pnl || 0);
-          break;
-      }
+    switch (sortBy) {
+      case "date":
+        compareValue =
+          new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
+        break;
+      case "level":
+        compareValue =
+          parseInt(a.level.replace("Level ", "")) -
+          parseInt(b.level.replace("Level ", ""));
+        break;
+      case "pnl":
+        compareValue = (b.pnl || 0) - (a.pnl || 0);
+        break;
+    }
 
-      return sortOrder === "asc" ? -compareValue : compareValue;
-    });
+    return sortOrder === "asc" ? -compareValue : compareValue;
+  });
 
   // Calculate summary statistics
   const calculateStats = () => {
-    const openTrades = trades.filter((t) => t.status === "OPEN").length;
-    const closedTrades = trades.filter((t) => t.status === "CLOSED").length;
+    const totalTrades = trades.length;
     const totalPnL = trades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
     const winningTrades = trades.filter((t) => (t.pnl || 0) > 0).length;
     const losingTrades = trades.filter((t) => (t.pnl || 0) < 0).length;
     const winRate =
-      closedTrades > 0
-        ? ((winningTrades / closedTrades) * 100).toFixed(1)
+      totalTrades > 0
+        ? ((winningTrades / totalTrades) * 100).toFixed(1)
         : "0";
 
     return {
-      openTrades,
-      closedTrades,
+      totalTrades,
       totalPnL,
       winningTrades,
       losingTrades,
@@ -197,7 +177,10 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         <h2>Trade Ledger</h2>
         <button
           className="add-trade-button"
-          onClick={() => setShowAddTrade(true)}
+          onClick={() => {
+            console.log("Add Trade button clicked");
+            setShowAddTrade(true);
+          }}
         >
           + Add Trade
         </button>
@@ -218,30 +201,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <div className="stat-value">{stats.winRate}%</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Open Trades</div>
-          <div className="stat-value">{stats.openTrades}</div>
+          <div className="stat-label">Total Trades</div>
+          <div className="stat-value">{stats.totalTrades}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Closed Trades</div>
-          <div className="stat-value">{stats.closedTrades}</div>
+          <div className="stat-label">Winning Trades</div>
+          <div className="stat-value">{stats.winningTrades}</div>
         </div>
       </div>
 
-      {/* Filters and Sorting */}
+      {/* Sorting */}
       <div className="trade-ledger-controls">
-        <div className="filter-group">
-          <label>Filter:</label>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as any)}
-            className="filter-select"
-          >
-            <option value="ALL">All Trades</option>
-            <option value="OPEN">Open</option>
-            <option value="CLOSED">Closed</option>
-          </select>
-        </div>
-
         <div className="sort-group">
           <label>Sort by:</label>
           <select
@@ -255,7 +225,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </select>
           <button
             className="sort-order-button"
-            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            onClick={() =>
+              setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+            }
           >
             {sortOrder === "asc" ? "↑" : "↓"}
           </button>
@@ -263,18 +235,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       </div>
 
       {/* Trade List */}
-      {filteredAndSortedTrades.length > 0 ? (
+      {sortedTrades.length > 0 ? (
         <div className="trade-list">
-          {filteredAndSortedTrades.map((trade) => (
+          {sortedTrades.map((trade) => (
             <div
               key={trade.id}
-              className={`trade-card ${
-                trade.status === "OPEN"
-                  ? "open-trade"
-                  : trade.status === "CLOSED"
-                  ? "closed-trade"
-                  : "expired-trade"
-              }`}
+              className="trade-card"
             >
               <div className="trade-card-header">
                 <div className="trade-date">
@@ -348,7 +314,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       )}
 
-      {/* Add Trade Form */}
+      {/* Add Trade Form Modal */}
       {showAddTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -360,16 +326,15 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       )}
 
-      {/* Edit Trade Form */}
+      {/* Edit Trade Form Modal */}
       {editingTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
             <TradeForm
               onSubmit={(tradeData) => {
-                // Add the id back to the trade data before passing to updateExistingTrade
                 updateExistingTrade({
                   ...tradeData,
-                  id: editingTrade.id,
+                  id: editingTrade.id
                 });
               }}
               initialValues={editingTrade}
