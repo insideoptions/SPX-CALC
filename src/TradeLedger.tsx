@@ -1,14 +1,36 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "./GoogleAuthContext";
-import "./TradeLedger.css";
-import {
-  fetchTrades,
-  createTrade,
-  updateTrade,
-  deleteTrade,
-  Trade,
-} from "./api";
 import TradeForm from "./TradeForm";
+import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
+import "./TradeLedger.css";
+
+// Trade interface
+export interface Trade {
+  id: string;
+  userId: string;
+  userEmail: string;
+  tradeDate: string;
+  entryDate: string;
+  exitDate?: string;
+  level: string;
+  contractQuantity: number;
+  entryPremium: number;
+  exitPremium?: number;
+  tradeType: "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD";
+  strikes: {
+    sellPut: number;
+    buyPut: number;
+    sellCall: number;
+    buyCall: number;
+  };
+  status: "OPEN" | "CLOSED" | "EXPIRED";
+  pnl?: number;
+  fees: number;
+  notes?: string;
+  isAutoPopulated: boolean;
+  matrix: string;
+  buyingPower: string;
+}
 
 // Props for the component
 interface TradeLedgerProps {
@@ -21,6 +43,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [showAddTrade, setShowAddTrade] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "OPEN" | "CLOSED">(
+    "ALL"
+  );
   const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -31,22 +56,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   }, [user]);
 
-  // Debug state changes
-  useEffect(() => {
-    console.log("showAddTrade state changed:", showAddTrade);
-  }, [showAddTrade]);
-
   // Load trades from API
   const loadTrades = async () => {
-    if (!user?.email) return;
-
     try {
       setLoading(true);
-      const fetchedTrades = await fetchTrades(user.email);
-      setTrades(fetchedTrades);
-
-      if (onTradeUpdate) {
-        onTradeUpdate(fetchedTrades);
+      if (user?.email) {
+        const data = await fetchTrades(user.email);
+        console.log("Loaded trades:", data);
+        setTrades(data);
+        if (onTradeUpdate) {
+          onTradeUpdate(data);
+        }
       }
     } catch (error) {
       console.error("Error loading trades:", error);
@@ -56,36 +76,22 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Add a new trade
-  const addTrade = async (tradeData: Omit<Trade, "id">) => {
-    console.log("addTrade function called with data:", tradeData);
-
-    if (!user?.email) {
-      console.error("No user email found");
-      return;
-    }
-
+  const addTrade = async (tradeData: Partial<Trade>) => {
     try {
-      console.log("Preparing to create trade with user:", user);
+      console.log("Adding new trade:", tradeData);
       const newTrade = {
         ...tradeData,
-        userId: user.id,
-        userEmail: user.email,
-      };
+        userId: user?.id || "",
+        userEmail: user?.email || "",
+        entryDate: new Date().toISOString(),
+        isAutoPopulated: false,
+        status: tradeData.status || "OPEN",
+      } as Omit<Trade, "id">;
 
-      console.log("Calling createTrade API with:", newTrade);
       const createdTrade = await createTrade(newTrade);
-      console.log("API response:", createdTrade);
-
       if (createdTrade) {
-        console.log("Trade created successfully, updating state");
         setTrades([...trades, createdTrade]);
         setShowAddTrade(false);
-
-        if (onTradeUpdate) {
-          onTradeUpdate([...trades, createdTrade]);
-        }
-      } else {
-        console.error("Failed to create trade - no response from API");
       }
     } catch (error) {
       console.error("Error adding trade:", error);
@@ -93,25 +99,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Update an existing trade
-  const updateExistingTrade = async (tradeData: Trade) => {
-    console.log("updateExistingTrade called with:", tradeData);
-    try {
-      const updatedTrade = await updateTrade(tradeData);
-      console.log("API response for update:", updatedTrade);
+  const updateExistingTrade = async (tradeData: Partial<Trade>) => {
+    if (!tradeData.id) return;
 
+    try {
+      console.log("Updating trade:", tradeData);
+      const updatedTrade = await updateTrade(tradeData as Trade);
       if (updatedTrade) {
         setTrades(
           trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
         );
         setEditingTrade(null);
-
-        if (onTradeUpdate) {
-          onTradeUpdate(
-            trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
-          );
-        }
-      } else {
-        console.error("Failed to update trade - no response from API");
       }
     } catch (error) {
       console.error("Error updating trade:", error);
@@ -120,17 +118,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Delete a trade
   const removeTrade = async (tradeId: string) => {
-    if (!user?.email) return;
-
     try {
-      const success = await deleteTrade(tradeId, user.email);
+      console.log("Deleting trade:", tradeId);
+      const success = await deleteTrade(tradeId);
       if (success) {
-        const updatedTrades = trades.filter((t) => t.id !== tradeId);
-        setTrades(updatedTrades);
-
-        if (onTradeUpdate) {
-          onTradeUpdate(updatedTrades);
-        }
+        setTrades(trades.filter((t) => t.id !== tradeId));
       }
     } catch (error) {
       console.error("Error deleting trade:", error);
@@ -148,39 +140,48 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     return grossPnL - trade.fees;
   };
 
-  // Sort trades
-  const sortedTrades = [...trades].sort((a, b) => {
-    let compareValue = 0;
+  // Filter and sort trades
+  const filteredAndSortedTrades = trades
+    .filter((trade) => {
+      if (filterStatus === "ALL") return true;
+      return trade.status === filterStatus;
+    })
+    .sort((a, b) => {
+      let compareValue = 0;
 
-    switch (sortBy) {
-      case "date":
-        compareValue =
-          new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
-        break;
-      case "level":
-        compareValue =
-          parseInt(a.level.replace("Level ", "")) -
-          parseInt(b.level.replace("Level ", ""));
-        break;
-      case "pnl":
-        compareValue = (b.pnl || 0) - (a.pnl || 0);
-        break;
-    }
+      switch (sortBy) {
+        case "date":
+          compareValue =
+            new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
+          break;
+        case "level":
+          compareValue =
+            parseInt(a.level.replace("Level ", "")) -
+            parseInt(b.level.replace("Level ", ""));
+          break;
+        case "pnl":
+          compareValue = (b.pnl || 0) - (a.pnl || 0);
+          break;
+      }
 
-    return sortOrder === "asc" ? -compareValue : compareValue;
-  });
+      return sortOrder === "asc" ? -compareValue : compareValue;
+    });
 
   // Calculate summary statistics
   const calculateStats = () => {
-    const totalTrades = trades.length;
+    const openTrades = trades.filter((t) => t.status === "OPEN").length;
+    const closedTrades = trades.filter((t) => t.status === "CLOSED").length;
     const totalPnL = trades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
     const winningTrades = trades.filter((t) => (t.pnl || 0) > 0).length;
     const losingTrades = trades.filter((t) => (t.pnl || 0) < 0).length;
     const winRate =
-      totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : "0";
+      closedTrades > 0
+        ? ((winningTrades / closedTrades) * 100).toFixed(1)
+        : "0";
 
     return {
-      totalTrades,
+      openTrades,
+      closedTrades,
       totalPnL,
       winningTrades,
       losingTrades,
@@ -207,10 +208,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         <h2>Trade Ledger</h2>
         <button
           className="add-trade-button"
-          onClick={() => {
-            console.log("Add Trade button clicked");
-            setShowAddTrade(true);
-          }}
+          onClick={() => setShowAddTrade(true)}
         >
           + Add Trade
         </button>
@@ -232,7 +230,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
         <div className="stat-card">
           <div className="stat-label">Total Trades</div>
-          <div className="stat-value">{stats.totalTrades}</div>
+          <div className="stat-value">{trades.length}</div>
         </div>
         <div className="stat-card">
           <div className="stat-label">Winning Trades</div>
@@ -240,8 +238,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       </div>
 
-      {/* Sorting */}
+      {/* Filters and Sorting */}
       <div className="trade-ledger-controls">
+        <div className="filter-group">
+          <label>Filter:</label>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+            className="filter-select"
+          >
+            <option value="ALL">All Trades</option>
+            <option value="OPEN">Open</option>
+            <option value="CLOSED">Closed</option>
+          </select>
+        </div>
+
         <div className="sort-group">
           <label>Sort by:</label>
           <select
@@ -262,113 +273,191 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       </div>
 
-      {/* Trade List */}
-      {sortedTrades.length > 0 ? (
-        <div className="trade-list">
-          {sortedTrades.map((trade) => (
-            <div key={trade.id} className="trade-card">
-              <div className="trade-card-header">
-                <div className="trade-date">
-                  {new Date(trade.tradeDate).toLocaleDateString()}
-                </div>
-                <div className="trade-level">{trade.level}</div>
-                <div className="trade-status">{trade.status}</div>
-              </div>
-
-              <div className="trade-details">
-                <div className="trade-type">
-                  {trade.tradeType.replace("_", " ")}
-                </div>
-                <div className="trade-strikes">
-                  <span>
-                    P: {trade.strikes.buyPut} / {trade.strikes.sellPut}
-                  </span>
-                  <span>
-                    C: {trade.strikes.sellCall} / {trade.strikes.buyCall}
-                  </span>
-                </div>
-                <div className="trade-premium">
-                  <div>Entry: ${trade.entryPremium.toFixed(2)}</div>
-                  {trade.exitPremium && (
-                    <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
-                  )}
-                </div>
-                <div className="trade-quantity">
-                  {trade.contractQuantity} contract
-                  {trade.contractQuantity > 1 ? "s" : ""}
-                </div>
-                {trade.pnl !== undefined && (
-                  <div
-                    className={`trade-pnl ${
-                      trade.pnl >= 0 ? "profit" : "loss"
-                    }`}
+      {/* Trades Table */}
+      <div className="trades-table-container">
+        <table className="trades-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Level</th>
+              <th>Type</th>
+              <th>Contracts</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>Status</th>
+              <th>P&L</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAndSortedTrades.map((trade) => (
+              <tr
+                key={trade.id}
+                className={trade.status === "OPEN" ? "open-trade" : ""}
+              >
+                <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
+                <td>
+                  <span
+                    className={`level-badge level-${trade.level
+                      .toLowerCase()
+                      .replace(" ", "-")}`}
                   >
-                    ${trade.pnl.toFixed(2)}
-                  </div>
-                )}
-              </div>
+                    {trade.level}
+                  </span>
+                </td>
+                <td>{trade.tradeType.replace("_", " ")}</td>
+                <td>{trade.contractQuantity}</td>
+                <td>${trade.entryPremium.toFixed(2)}</td>
+                <td>
+                  {trade.exitPremium ? `$${trade.exitPremium.toFixed(2)}` : "-"}
+                </td>
+                <td>
+                  <span
+                    className={`status-badge status-${trade.status.toLowerCase()}`}
+                  >
+                    {trade.status}
+                  </span>
+                </td>
+                <td className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}>
+                  {trade.pnl ? `$${trade.pnl.toFixed(2)}` : "-"}
+                </td>
+                <td>
+                  <button
+                    className="action-button edit"
+                    onClick={() => setEditingTrade(trade)}
+                  >
+                    Edit
+                  </button>
+                  {trade.status === "OPEN" && (
+                    <button
+                      className="action-button close"
+                      onClick={() => {
+                        const tradeToClose = {
+                          ...trade,
+                          status: "CLOSED" as const,
+                          exitDate: new Date().toISOString(),
+                        };
+                        setEditingTrade(tradeToClose);
+                      }}
+                    >
+                      Close
+                    </button>
+                  )}
+                  <button
+                    className="action-button delete"
+                    onClick={() => removeTrade(trade.id)}
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-              <div className="trade-card-footer">
-                <button
-                  className="edit-trade-button"
-                  onClick={() => setEditingTrade(trade)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="delete-trade-button"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Are you sure you want to delete this trade?"
-                      )
-                    ) {
-                      removeTrade(trade.id);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="no-trades-message">
-          <p>No trades found. Add your first trade to get started!</p>
-        </div>
-      )}
+        {filteredAndSortedTrades.length === 0 && (
+          <div className="no-trades">
+            <p>No trades found. Start by adding your first trade!</p>
+          </div>
+        )}
+      </div>
 
-      {/* Add Trade Form Modal */}
+      {/* Trade Form Modal */}
       {showAddTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
             <TradeForm
-              onSubmit={addTrade}
+              onSave={addTrade}
               onCancel={() => setShowAddTrade(false)}
             />
           </div>
         </div>
       )}
 
-      {/* Edit Trade Form Modal */}
+      {/* Edit Trade Modal */}
       {editingTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
             <TradeForm
-              onSubmit={(tradeData) => {
-                updateExistingTrade({
-                  ...tradeData,
-                  id: editingTrade.id,
-                });
-              }}
-              initialValues={editingTrade}
-              isEditing={true}
+              trade={editingTrade}
+              onSave={updateExistingTrade}
               onCancel={() => setEditingTrade(null)}
+              isClosing={
+                editingTrade.status === "CLOSED" && !editingTrade.exitDate
+              }
             />
           </div>
         </div>
       )}
+
+      {/* Mobile View - Cards */}
+      <div className="trades-mobile-view">
+        {filteredAndSortedTrades.map((trade) => (
+          <div key={trade.id} className="trade-card-mobile">
+            <div className="trade-card-header">
+              <span
+                className={`level-badge level-${trade.level
+                  .toLowerCase()
+                  .replace(" ", "-")}`}
+              >
+                {trade.level}
+              </span>
+              <span
+                className={`status-badge status-${trade.status.toLowerCase()}`}
+              >
+                {trade.status}
+              </span>
+            </div>
+
+            <div className="trade-card-details">
+              <div className="detail-row">
+                <span className="detail-label">Date:</span>
+                <span>{new Date(trade.tradeDate).toLocaleDateString()}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Contracts:</span>
+                <span>{trade.contractQuantity}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Entry/Exit:</span>
+                <span>
+                  ${trade.entryPremium.toFixed(2)} /
+                  {trade.exitPremium
+                    ? ` $${trade.exitPremium.toFixed(2)}`
+                    : " -"}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">P&L:</span>
+                <span
+                  className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}
+                >
+                  {trade.pnl ? `$${trade.pnl.toFixed(2)}` : "-"}
+                </span>
+              </div>
+            </div>
+
+            <div className="trade-card-actions">
+              <button onClick={() => setEditingTrade(trade)}>Edit</button>
+              {trade.status === "OPEN" && (
+                <button
+                  onClick={() => {
+                    const tradeToClose = {
+                      ...trade,
+                      status: "CLOSED" as const,
+                      exitDate: new Date().toISOString(),
+                    };
+                    setEditingTrade(tradeToClose);
+                  }}
+                >
+                  Close Trade
+                </button>
+              )}
+              <button onClick={() => removeTrade(trade.id)}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
