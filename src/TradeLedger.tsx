@@ -85,7 +85,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         userEmail: user?.email || "",
         entryDate: new Date().toISOString(),
         isAutoPopulated: false,
-        status: tradeData.status || "OPEN",
       } as Omit<Trade, "id">;
 
       const createdTrade = await createTrade(newTrade);
@@ -444,7 +443,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                   onClick={() => {
                     const tradeToClose = {
                       ...trade,
-                      status: "CLOSED" as const,
+                      status: "CLOSED",
                       exitDate: new Date().toISOString(),
                     };
                     setEditingTrade(tradeToClose);

@@ -53,7 +53,6 @@ const TradeForm: React.FC<TradeFormProps> = ({
 
     const tradeData: Partial<Trade> = {
       ...trade,
-      id: trade?.id,
       userId: user?.id || "",
       userEmail: user?.email || "",
       tradeDate: formData.tradeDate,
@@ -97,294 +96,297 @@ const TradeForm: React.FC<TradeFormProps> = ({
   };
 
   return (
-    <div className="trade-form-container">
-      <div className="trade-form-header">
-        <h3>
-          {isClosing ? "Close Trade" : trade ? "Edit Trade" : "Add New Trade"}
-        </h3>
-        <button className="close-button" onClick={onCancel}>
-          ×
-        </button>
+    <div className="trade-form-overlay">
+      <div className="trade-form-container">
+        <div className="trade-form-header">
+          <h3>
+            {isClosing ? "Close Trade" : trade ? "Edit Trade" : "Add New Trade"}
+          </h3>
+          <button className="close-button" onClick={onCancel}>
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="trade-form">
+          {/* Basic Info Section */}
+          <div className="form-section">
+            <h4>Basic Information</h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Trade Date</label>
+                <input
+                  type="date"
+                  value={formData.tradeDate}
+                  onChange={(e) =>
+                    handleInputChange("tradeDate", e.target.value)
+                  }
+                  required
+                  disabled={isClosing}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Level</label>
+                <select
+                  value={formData.level}
+                  onChange={(e) => handleInputChange("level", e.target.value)}
+                  disabled={isClosing}
+                >
+                  <option value="Level 2">Level 2</option>
+                  <option value="Level 3">Level 3</option>
+                  <option value="Level 4">Level 4</option>
+                  <option value="Level 5">Level 5</option>
+                  <option value="Level 6">Level 6</option>
+                  <option value="Level 7">Level 7</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Matrix Type</label>
+                <select
+                  value={formData.matrix}
+                  onChange={(e) => handleInputChange("matrix", e.target.value)}
+                  disabled={isClosing}
+                >
+                  <option value="standard">Standard Matrix</option>
+                  <option value="stacked">Stacked Matrix</option>
+                  <option value="shifted">Shifted Matrix</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Buying Power</label>
+                <select
+                  value={formData.buyingPower}
+                  onChange={(e) =>
+                    handleInputChange("buyingPower", e.target.value)
+                  }
+                  disabled={isClosing}
+                >
+                  <option value="$11,800">$11,800</option>
+                  <option value="$16,300">$16,300</option>
+                  <option value="$21,900">$21,900</option>
+                  <option value="$26,350">$26,350</option>
+                  <option value="$30,850">$30,850</option>
+                  <option value="$33,300">$33,300</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Trade Details Section */}
+          <div className="form-section">
+            <h4>Trade Details</h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Trade Type</label>
+                <select
+                  value={formData.tradeType}
+                  onChange={(e) =>
+                    handleInputChange("tradeType", e.target.value)
+                  }
+                  disabled={isClosing}
+                >
+                  <option value="IRON_CONDOR">Iron Condor</option>
+                  <option value="PUT_SPREAD">Put Spread</option>
+                  <option value="CALL_SPREAD">Call Spread</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Contracts</label>
+                <input
+                  type="number"
+                  value={formData.contractQuantity}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "contractQuantity",
+                      parseInt(e.target.value)
+                    )
+                  }
+                  min="1"
+                  required
+                  disabled={isClosing}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Entry Premium ($)</label>
+                <input
+                  type="number"
+                  value={formData.entryPremium}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "entryPremium",
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  step="0.01"
+                  min="0"
+                  required
+                  disabled={isClosing}
+                />
+              </div>
+
+              {(isClosing || trade?.status === "CLOSED") && (
+                <div className="form-group">
+                  <label>Exit Premium ($)</label>
+                  <input
+                    type="number"
+                    value={formData.exitPremium}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "exitPremium",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    step="0.01"
+                    min="0"
+                    required={isClosing}
+                  />
+                </div>
+              )}
+
+              <div className="form-group">
+                <label>Total Fees ($)</label>
+                <input
+                  type="number"
+                  value={formData.fees}
+                  onChange={(e) =>
+                    handleInputChange("fees", parseFloat(e.target.value))
+                  }
+                  step="0.01"
+                  min="0"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Strike Prices Section */}
+          {!isClosing && (
+            <div className="form-section">
+              <h4>Strike Prices</h4>
+              <div className="form-grid">
+                {formData.tradeType !== "CALL_SPREAD" && (
+                  <>
+                    <div className="form-group">
+                      <label>Sell Put Strike</label>
+                      <input
+                        type="number"
+                        value={formData.sellPut}
+                        onChange={(e) =>
+                          handleInputChange("sellPut", parseInt(e.target.value))
+                        }
+                        step="5"
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Buy Put Strike</label>
+                      <input
+                        type="number"
+                        value={formData.buyPut}
+                        onChange={(e) =>
+                          handleInputChange("buyPut", parseInt(e.target.value))
+                        }
+                        step="5"
+                        min="0"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {formData.tradeType !== "PUT_SPREAD" && (
+                  <>
+                    <div className="form-group">
+                      <label>Sell Call Strike</label>
+                      <input
+                        type="number"
+                        value={formData.sellCall}
+                        onChange={(e) =>
+                          handleInputChange(
+                            "sellCall",
+                            parseInt(e.target.value)
+                          )
+                        }
+                        step="5"
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Buy Call Strike</label>
+                      <input
+                        type="number"
+                        value={formData.buyCall}
+                        onChange={(e) =>
+                          handleInputChange("buyCall", parseInt(e.target.value))
+                        }
+                        step="5"
+                        min="0"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes Section */}
+          <div className="form-section">
+            <h4>Additional Notes</h4>
+            <div className="form-group">
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleInputChange("notes", e.target.value)}
+                rows={3}
+                placeholder="Add any notes about this trade..."
+                className="form-textarea"
+              />
+            </div>
+          </div>
+
+          {/* P&L Preview */}
+          {(isClosing || formData.exitPremium > 0) && (
+            <div className="pnl-preview">
+              <h4>P&L Preview</h4>
+              <div className="pnl-details">
+                <div className="pnl-row">
+                  <span>Gross P&L:</span>
+                  <span>
+                    $
+                    {(
+                      (formData.entryPremium - formData.exitPremium) *
+                      formData.contractQuantity *
+                      100
+                    ).toFixed(2)}
+                  </span>
+                </div>
+                <div className="pnl-row">
+                  <span>Total Fees:</span>
+                  <span>-${formData.fees.toFixed(2)}</span>
+                </div>
+                <div className="pnl-row total">
+                  <span>Net P&L:</span>
+                  <span className={calculatePnL() >= 0 ? "profit" : "loss"}>
+                    ${calculatePnL().toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Form Actions */}
+          <div className="form-actions">
+            <button type="button" className="cancel-button" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit" className="save-button">
+              {isClosing ? "Close Trade" : trade ? "Update Trade" : "Add Trade"}
+            </button>
+          </div>
+        </form>
       </div>
-
-      <form onSubmit={handleSubmit} className="trade-form">
-        {/* Basic Info Section */}
-        <div className="form-section">
-          <h4>Basic Information</h4>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Trade Date</label>
-              <input
-                type="date"
-                value={formData.tradeDate}
-                onChange={(e) =>
-                  handleInputChange("tradeDate", e.target.value)
-                }
-                required
-                disabled={isClosing}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Level</label>
-              <select
-                value={formData.level}
-                onChange={(e) => handleInputChange("level", e.target.value)}
-                disabled={isClosing}
-              >
-                <option value="Level 2">Level 2</option>
-                <option value="Level 3">Level 3</option>
-                <option value="Level 4">Level 4</option>
-                <option value="Level 5">Level 5</option>
-                <option value="Level 6">Level 6</option>
-                <option value="Level 7">Level 7</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Matrix Type</label>
-              <select
-                value={formData.matrix}
-                onChange={(e) => handleInputChange("matrix", e.target.value)}
-                disabled={isClosing}
-              >
-                <option value="standard">Standard Matrix</option>
-                <option value="stacked">Stacked Matrix</option>
-                <option value="shifted">Shifted Matrix</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Buying Power</label>
-              <select
-                value={formData.buyingPower}
-                onChange={(e) =>
-                  handleInputChange("buyingPower", e.target.value)
-                }
-                disabled={isClosing}
-              >
-                <option value="$11,800">$11,800</option>
-                <option value="$16,300">$16,300</option>
-                <option value="$21,900">$21,900</option>
-                <option value="$26,350">$26,350</option>
-                <option value="$30,850">$30,850</option>
-                <option value="$33,300">$33,300</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Trade Details Section */}
-        <div className="form-section">
-          <h4>Trade Details</h4>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Trade Type</label>
-              <select
-                value={formData.tradeType}
-                onChange={(e) =>
-                  handleInputChange("tradeType", e.target.value)
-                }
-                disabled={isClosing}
-              >
-                <option value="IRON_CONDOR">Iron Condor</option>
-                <option value="PUT_SPREAD">Put Spread</option>
-                <option value="CALL_SPREAD">Call Spread</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Contracts</label>
-              <input
-                type="number"
-                min="1"
-                value={formData.contractQuantity}
-                onChange={(e) =>
-                  handleInputChange(
-                    "contractQuantity",
-                    parseInt(e.target.value)
-                  )
-                }
-                required
-                disabled={isClosing}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Entry Premium</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.entryPremium}
-                onChange={(e) =>
-                  handleInputChange(
-                    "entryPremium",
-                    parseFloat(e.target.value)
-                  )
-                }
-                required
-                disabled={isClosing}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Exit Premium</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.exitPremium}
-                onChange={(e) =>
-                  handleInputChange(
-                    "exitPremium",
-                    parseFloat(e.target.value)
-                  )
-                }
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Fees</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.fees}
-                onChange={(e) =>
-                  handleInputChange("fees", parseFloat(e.target.value))
-                }
-                required
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Strike Prices Section */}
-        <div className="form-section">
-          <h4>Strike Prices</h4>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Sell Put</label>
-              <input
-                type="number"
-                step="5"
-                value={formData.sellPut}
-                onChange={(e) =>
-                  handleInputChange("sellPut", parseInt(e.target.value))
-                }
-                required
-                disabled={isClosing}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Buy Put</label>
-              <input
-                type="number"
-                step="5"
-                value={formData.buyPut}
-                onChange={(e) =>
-                  handleInputChange("buyPut", parseInt(e.target.value))
-                }
-                required
-                disabled={isClosing}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Sell Call</label>
-              <input
-                type="number"
-                step="5"
-                value={formData.sellCall}
-                onChange={(e) =>
-                  handleInputChange("sellCall", parseInt(e.target.value))
-                }
-                required
-                disabled={isClosing || formData.tradeType === "PUT_SPREAD"}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Buy Call</label>
-              <input
-                type="number"
-                step="5"
-                value={formData.buyCall}
-                onChange={(e) =>
-                  handleInputChange("buyCall", parseInt(e.target.value))
-                }
-                required
-                disabled={isClosing || formData.tradeType === "PUT_SPREAD"}
-                onFocus={(e) => e.target.select()}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* P&L Preview */}
-        {(isClosing || formData.exitPremium > 0) && (
-          <div className="pnl-preview">
-            <h4>P&L Preview</h4>
-            <div className="pnl-details">
-              <div className="pnl-row">
-                <span>Entry Premium:</span>
-                <span>
-                  ${formData.entryPremium.toFixed(2)} × {formData.contractQuantity} × 100 = $
-                  {(formData.entryPremium * formData.contractQuantity * 100).toFixed(2)}
-                </span>
-              </div>
-              <div className="pnl-row">
-                <span>Exit Premium:</span>
-                <span>
-                  ${formData.exitPremium.toFixed(2)} × {formData.contractQuantity} × 100 = $
-                  {(formData.exitPremium * formData.contractQuantity * 100).toFixed(2)}
-                </span>
-              </div>
-              <div className="pnl-row">
-                <span>Fees:</span>
-                <span>${formData.fees.toFixed(2)}</span>
-              </div>
-              <div className="pnl-row total">
-                <span>Total P&L:</span>
-                <span className={calculatePnL() >= 0 ? "profit" : "loss"}>
-                  ${calculatePnL().toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Notes */}
-        <div className="form-section">
-          <h4>Notes</h4>
-          <textarea
-            className="form-textarea"
-            value={formData.notes}
-            onChange={(e) => handleInputChange("notes", e.target.value)}
-            rows={4}
-            placeholder="Add any notes or comments about this trade..."
-          ></textarea>
-        </div>
-
-        {/* Form Actions */}
-        <div className="form-actions">
-          <button
-            type="button"
-            className="cancel-button"
-            onClick={onCancel}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="save-button">
-            {isClosing ? "Close Trade" : trade ? "Save Changes" : "Add Trade"}
-          </button>
-        </div>
-      </form>
     </div>
   );
 };
