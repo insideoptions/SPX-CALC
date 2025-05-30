@@ -1,34 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import "./TradeLedger.css";
-
-// Trade interface
-export interface Trade {
-  id: string;
-  userId: string;
-  userEmail: string;
-  tradeDate: string;
-  entryDate: string;
-  exitDate?: string;
-  level: string;
-  contractQuantity: number;
-  entryPremium: number;
-  exitPremium?: number;
-  tradeType: "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD";
-  strikes: {
-    sellPut: number;
-    buyPut: number;
-    sellCall: number;
-    buyCall: number;
-  };
-  status: "OPEN" | "CLOSED" | "EXPIRED";
-  pnl?: number;
-  fees: number;
-  notes?: string;
-  isAutoPopulated: boolean;
-  matrix: string;
-  buyingPower: string;
-}
+import {
+  fetchTrades,
+  createTrade,
+  updateTrade,
+  deleteTrade,
+  Trade,
+} from "./api";
+import TradeForm from "./TradeForm";
 
 // Props for the component
 interface TradeLedgerProps {
@@ -50,27 +30,91 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Fetch trades on component mount
   useEffect(() => {
     if (user?.email) {
-      fetchTrades();
+      loadTrades();
     }
   }, [user]);
 
-  // Fetch trades from API
-  const fetchTrades = async () => {
+  // Load trades from API
+  const loadTrades = async () => {
+    if (!user?.email) return;
+
     try {
       setLoading(true);
-      // TODO: Replace with actual API endpoint
-      const response = await fetch(`/api/trades/${user?.email}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTrades(data);
+      const fetchedTrades = await fetchTrades(user.email);
+      setTrades(fetchedTrades);
+
+      if (onTradeUpdate) {
+        onTradeUpdate(fetchedTrades);
+      }
+    } catch (error) {
+      console.error("Error loading trades:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add a new trade
+  const addTrade = async (tradeData: Omit<Trade, "id">) => {
+    if (!user?.email) return;
+
+    try {
+      const newTrade = {
+        ...tradeData,
+        userId: user.id,
+        userEmail: user.email,
+      };
+
+      const createdTrade = await createTrade(newTrade);
+      if (createdTrade) {
+        setTrades([...trades, createdTrade]);
+        setShowAddTrade(false);
+
         if (onTradeUpdate) {
-          onTradeUpdate(data);
+          onTradeUpdate([...trades, createdTrade]);
         }
       }
     } catch (error) {
-      console.error("Error fetching trades:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error adding trade:", error);
+    }
+  };
+
+  // Update an existing trade
+  const updateExistingTrade = async (tradeData: Trade) => {
+    try {
+      const updatedTrade = await updateTrade(tradeData);
+      if (updatedTrade) {
+        setTrades(
+          trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+        );
+        setEditingTrade(null);
+
+        if (onTradeUpdate) {
+          onTradeUpdate(
+            trades.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error updating trade:", error);
+    }
+  };
+
+  // Delete a trade
+  const removeTrade = async (tradeId: string) => {
+    if (!user?.email) return;
+
+    try {
+      const success = await deleteTrade(tradeId, user.email);
+      if (success) {
+        const updatedTrades = trades.filter((t) => t.id !== tradeId);
+        setTrades(updatedTrades);
+
+        if (onTradeUpdate) {
+          onTradeUpdate(updatedTrades);
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting trade:", error);
     }
   };
 
@@ -218,138 +262,123 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       </div>
 
-      {/* Trades Table */}
-      <div className="trades-table-container">
-        <table className="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Level</th>
-              <th>Type</th>
-              <th>Contracts</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>Status</th>
-              <th>P&L</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndSortedTrades.map((trade) => (
-              <tr
-                key={trade.id}
-                className={trade.status === "OPEN" ? "open-trade" : ""}
-              >
-                <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
-                <td>
-                  <span
-                    className={`level-badge level-${trade.level
-                      .toLowerCase()
-                      .replace(" ", "-")}`}
-                  >
-                    {trade.level}
+      {/* Trade List */}
+      {filteredAndSortedTrades.length > 0 ? (
+        <div className="trade-list">
+          {filteredAndSortedTrades.map((trade) => (
+            <div
+              key={trade.id}
+              className={`trade-card ${
+                trade.status === "OPEN"
+                  ? "open-trade"
+                  : trade.status === "CLOSED"
+                  ? "closed-trade"
+                  : "expired-trade"
+              }`}
+            >
+              <div className="trade-card-header">
+                <div className="trade-date">
+                  {new Date(trade.tradeDate).toLocaleDateString()}
+                </div>
+                <div className="trade-level">{trade.level}</div>
+                <div className="trade-status">{trade.status}</div>
+              </div>
+
+              <div className="trade-details">
+                <div className="trade-type">
+                  {trade.tradeType.replace("_", " ")}
+                </div>
+                <div className="trade-strikes">
+                  <span>
+                    P: {trade.strikes.buyPut} / {trade.strikes.sellPut}
                   </span>
-                </td>
-                <td>{trade.tradeType.replace("_", " ")}</td>
-                <td>{trade.contractQuantity}</td>
-                <td>${trade.entryPremium.toFixed(2)}</td>
-                <td>
-                  {trade.exitPremium ? `$${trade.exitPremium.toFixed(2)}` : "-"}
-                </td>
-                <td>
-                  <span
-                    className={`status-badge status-${trade.status.toLowerCase()}`}
-                  >
-                    {trade.status}
+                  <span>
+                    C: {trade.strikes.sellCall} / {trade.strikes.buyCall}
                   </span>
-                </td>
-                <td className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}>
-                  {trade.pnl ? `$${trade.pnl.toFixed(2)}` : "-"}
-                </td>
-                <td>
-                  <button
-                    className="action-button edit"
-                    onClick={() => setEditingTrade(trade)}
-                  >
-                    Edit
-                  </button>
-                  {trade.status === "OPEN" && (
-                    <button
-                      className="action-button close"
-                      onClick={() => {
-                        /* Handle close trade */
-                      }}
-                    >
-                      Close
-                    </button>
+                </div>
+                <div className="trade-premium">
+                  <div>Entry: ${trade.entryPremium.toFixed(2)}</div>
+                  {trade.exitPremium && (
+                    <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {filteredAndSortedTrades.length === 0 && (
-          <div className="no-trades">
-            <p>No trades found. Start by adding your first trade!</p>
-          </div>
-        )}
-      </div>
-
-      {/* Mobile View - Cards */}
-      <div className="trades-mobile-view">
-        {filteredAndSortedTrades.map((trade) => (
-          <div key={trade.id} className="trade-card-mobile">
-            <div className="trade-card-header">
-              <span
-                className={`level-badge level-${trade.level
-                  .toLowerCase()
-                  .replace(" ", "-")}`}
-              >
-                {trade.level}
-              </span>
-              <span
-                className={`status-badge status-${trade.status.toLowerCase()}`}
-              >
-                {trade.status}
-              </span>
-            </div>
-
-            <div className="trade-card-details">
-              <div className="detail-row">
-                <span className="detail-label">Date:</span>
-                <span>{new Date(trade.tradeDate).toLocaleDateString()}</span>
+                </div>
+                <div className="trade-quantity">
+                  {trade.contractQuantity} contract
+                  {trade.contractQuantity > 1 ? "s" : ""}
+                </div>
+                {trade.pnl !== undefined && (
+                  <div
+                    className={`trade-pnl ${
+                      trade.pnl >= 0 ? "profit" : "loss"
+                    }`}
+                  >
+                    ${trade.pnl.toFixed(2)}
+                  </div>
+                )}
               </div>
-              <div className="detail-row">
-                <span className="detail-label">Contracts:</span>
-                <span>{trade.contractQuantity}</span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">Entry/Exit:</span>
-                <span>
-                  ${trade.entryPremium.toFixed(2)} /
-                  {trade.exitPremium
-                    ? ` $${trade.exitPremium.toFixed(2)}`
-                    : " -"}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">P&L:</span>
-                <span
-                  className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}
+
+              <div className="trade-card-footer">
+                <button
+                  className="edit-trade-button"
+                  onClick={() => setEditingTrade(trade)}
                 >
-                  {trade.pnl ? `$${trade.pnl.toFixed(2)}` : "-"}
-                </span>
+                  Edit
+                </button>
+                <button
+                  className="delete-trade-button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Are you sure you want to delete this trade?"
+                      )
+                    ) {
+                      removeTrade(trade.id);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             </div>
+          ))}
+        </div>
+      ) : (
+        <div className="no-trades-message">
+          <p>No trades found. Add your first trade to get started!</p>
+        </div>
+      )}
 
-            <div className="trade-card-actions">
-              <button onClick={() => setEditingTrade(trade)}>Edit</button>
-              {trade.status === "OPEN" && <button>Close Trade</button>}
-            </div>
+      {/* Add Trade Form */}
+      {showAddTrade && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <TradeForm
+              onSubmit={addTrade}
+              onCancel={() => setShowAddTrade(false)}
+            />
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* Edit Trade Form */}
+      {editingTrade && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <TradeForm
+              onSubmit={(tradeData) => {
+                // Add the id back to the trade data before passing to updateExistingTrade
+                updateExistingTrade({
+                  ...tradeData,
+                  id: editingTrade.id,
+                });
+              }}
+              initialValues={editingTrade}
+              isEditing={true}
+              onCancel={() => setEditingTrade(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
