@@ -589,6 +589,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               <th>Sell Call</th>
               <th>Entry</th>
               <th>Exit</th>
+              <th>SPX Close</th>
               <th>Status</th>
               <th>P&L</th>
               <th>Actions</th>
@@ -617,6 +618,24 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 <td>${trade.entryPremium.toFixed(2)}</td>
                 <td>
                   {trade.exitPremium ? `$${trade.exitPremium.toFixed(2)}` : "-"}
+                </td>
+                <td>
+                  {trade.spxClosePrice ? (
+                    <span
+                      className={`spx-close ${
+                        trade.isMaxProfit ? "spx-win" : "spx-loss"
+                      }`}
+                    >
+                      {trade.spxClosePrice}
+                      {trade.tradeType === "IRON_CONDOR" && (
+                        <span className="spx-indicator">
+                          {trade.isMaxProfit ? "✓" : "✗"}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td>
                   <span

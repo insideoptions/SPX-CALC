@@ -34,23 +34,61 @@ const TradeForm: React.FC<TradeFormProps> = ({
     notes: trade?.notes || "",
     matrix: trade?.matrix || "standard",
     buyingPower: trade?.buyingPower || "$26,350",
+    spxClosePrice: trade?.spxClosePrice || 0,
   });
 
   // Calculate P&L in real-time
   const calculatePnL = () => {
-    if (isClosing || (trade && formData.exitPremium > 0)) {
-      const grossPnL =
-        (formData.entryPremium - formData.exitPremium) *
-        formData.contractQuantity *
-        100;
-      return grossPnL - formData.fees;
+    // If not closing or no exit premium, return 0
+    if (
+      !isClosing &&
+      !(trade && formData.exitPremium > 0) &&
+      !formData.spxClosePrice
+    ) {
+      return 0;
     }
-    return 0;
+
+    // For iron condors with SPX close price
+    if (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0) {
+      // Check if SPX closed between the sell sides (max profit)
+      const isMaxProfit =
+        formData.spxClosePrice > formData.sellPut &&
+        formData.spxClosePrice < formData.sellCall;
+
+      if (isMaxProfit) {
+        // Max profit: keep all premium
+        const maxProfit =
+          formData.entryPremium * formData.contractQuantity * 100 -
+          formData.fees;
+        return maxProfit;
+      } else {
+        // Loss: 5-wide spread minus premium received
+        // Standard iron condor spread width is 5 points ($500 per contract)
+        const loss =
+          (formData.entryPremium - 5.0) * formData.contractQuantity * 100 -
+          formData.fees;
+        return loss; // This will be negative
+      }
+    }
+
+    // Standard calculation for other cases
+    const grossPnL =
+      (formData.entryPremium - formData.exitPremium) *
+      formData.contractQuantity *
+      100;
+    return grossPnL - formData.fees;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Form submitted");
+
+    // Check if SPX closed between sell sides for iron condors
+    const isMaxProfit =
+      formData.tradeType === "IRON_CONDOR" &&
+      formData.spxClosePrice > 0 &&
+      formData.spxClosePrice > formData.sellPut &&
+      formData.spxClosePrice < formData.sellCall;
 
     const tradeData: Partial<Trade> = {
       ...trade,
@@ -71,7 +109,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
       },
       status: isClosing
         ? "CLOSED"
-        : formData.exitPremium > 0
+        : formData.exitPremium > 0 || formData.spxClosePrice > 0
         ? "CLOSED"
         : "OPEN",
       pnl: calculatePnL(),
@@ -80,6 +118,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
       isAutoPopulated: false,
       matrix: formData.matrix,
       buyingPower: formData.buyingPower,
+      spxClosePrice:
+        formData.spxClosePrice > 0 ? formData.spxClosePrice : undefined,
+      isMaxProfit: isMaxProfit,
     };
 
     if (isClosing) {
@@ -132,7 +173,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <label>Level</label>
               <select
                 value={formData.level}
-                onChange={(e) => handleInputChange("level", e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  handleInputChange("level", e.target.value)
+                }
                 disabled={isClosing}
               >
                 <option value="Level 2">Level 2</option>
@@ -148,7 +191,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <label>Matrix Type</label>
               <select
                 value={formData.matrix}
-                onChange={(e) => handleInputChange("matrix", e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  handleInputChange("matrix", e.target.value)
+                }
                 disabled={isClosing}
               >
                 <option value="standard">Standard Matrix</option>
@@ -161,7 +206,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <label>Buying Power</label>
               <select
                 value={formData.buyingPower}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
                   handleInputChange("buyingPower", e.target.value)
                 }
                 disabled={isClosing}
@@ -185,7 +230,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <label>Trade Type</label>
               <select
                 value={formData.tradeType}
-                onChange={(e) => handleInputChange("tradeType", e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  handleInputChange("tradeType", e.target.value)
+                }
                 disabled={isClosing}
               >
                 <option value="IRON_CONDOR">Iron Condor</option>
@@ -199,7 +246,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <input
                 type="number"
                 value={formData.contractQuantity}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   handleInputChange(
                     "contractQuantity",
                     parseInt(e.target.value)
@@ -216,7 +263,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <input
                 type="number"
                 value={formData.entryPremium}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   handleInputChange("entryPremium", parseFloat(e.target.value))
                 }
                 step="0.01"
@@ -227,19 +274,50 @@ const TradeForm: React.FC<TradeFormProps> = ({
             </div>
 
             {(isClosing || trade?.status === "CLOSED") && (
-              <div className="form-group">
-                <label>Exit Premium ($)</label>
-                <input
-                  type="number"
-                  value={formData.exitPremium}
-                  onChange={(e) =>
-                    handleInputChange("exitPremium", parseFloat(e.target.value))
-                  }
-                  step="0.01"
-                  min="0"
-                  required={isClosing}
-                />
-              </div>
+              <>
+                <div className="form-group">
+                  <label>Exit Premium ($)</label>
+                  <input
+                    type="number"
+                    value={formData.exitPremium}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      handleInputChange(
+                        "exitPremium",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    step="0.01"
+                    min="0"
+                    required={isClosing && formData.tradeType !== "IRON_CONDOR"}
+                  />
+                </div>
+
+                {formData.tradeType === "IRON_CONDOR" && (
+                  <div className="form-group">
+                    <label>SPX Close Price</label>
+                    <input
+                      type="number"
+                      value={formData.spxClosePrice || ""}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        handleInputChange(
+                          "spxClosePrice",
+                          e.target.value === "" ? 0 : parseFloat(e.target.value)
+                        )
+                      }
+                      step="0.01"
+                      min="0"
+                      placeholder="Enter SPX closing price"
+                      required={
+                        isClosing && formData.tradeType === "IRON_CONDOR"
+                      }
+                    />
+                    <small className="form-helper-text">
+                      If SPX closes between {formData.sellPut} and{" "}
+                      {formData.sellCall}, this trade is a 100% winner.
+                    </small>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="form-group">
@@ -247,7 +325,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
               <input
                 type="number"
                 value={formData.fees}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   handleInputChange("fees", parseFloat(e.target.value))
                 }
                 step="0.01"
@@ -270,7 +348,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
                     <input
                       type="number"
                       value={formData.buyPut}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleInputChange("buyPut", parseInt(e.target.value))
                       }
                       step="5"
@@ -282,7 +360,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
                     <input
                       type="number"
                       value={formData.sellPut}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleInputChange("sellPut", parseInt(e.target.value))
                       }
                       step="5"
@@ -299,7 +377,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
                     <input
                       type="number"
                       value={formData.sellCall}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleInputChange("sellCall", parseInt(e.target.value))
                       }
                       step="5"
@@ -311,7 +389,7 @@ const TradeForm: React.FC<TradeFormProps> = ({
                     <input
                       type="number"
                       value={formData.buyCall}
-                      onChange={(e) =>
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         handleInputChange("buyCall", parseInt(e.target.value))
                       }
                       step="5"
@@ -330,7 +408,9 @@ const TradeForm: React.FC<TradeFormProps> = ({
           <div className="form-group">
             <textarea
               value={formData.notes}
-              onChange={(e) => handleInputChange("notes", e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                handleInputChange("notes", e.target.value)
+              }
               rows={3}
               placeholder="Add any notes about this trade..."
               className="form-textarea"
@@ -339,25 +419,85 @@ const TradeForm: React.FC<TradeFormProps> = ({
         </div>
 
         {/* P&L Preview */}
-        {(isClosing || formData.exitPremium > 0) && (
+        {(isClosing ||
+          formData.exitPremium > 0 ||
+          (formData.tradeType === "IRON_CONDOR" &&
+            formData.spxClosePrice > 0)) && (
           <div className="pnl-preview">
             <h4>P&L Preview</h4>
             <div className="pnl-details">
-              <div className="pnl-row">
-                <span>Gross P&L:</span>
-                <span>
-                  $
-                  {(
-                    (formData.entryPremium - formData.exitPremium) *
-                    formData.contractQuantity *
-                    100
-                  ).toFixed(2)}
-                </span>
-              </div>
-              <div className="pnl-row">
-                <span>Total Fees:</span>
-                <span>-${formData.fees.toFixed(2)}</span>
-              </div>
+              {formData.tradeType === "IRON_CONDOR" &&
+              formData.spxClosePrice > 0 ? (
+                // Iron Condor with SPX close price
+                <>
+                  <div className="pnl-row">
+                    <span>SPX Close Price:</span>
+                    <span>{formData.spxClosePrice}</span>
+                  </div>
+                  <div className="pnl-row">
+                    <span>Sell Put Strike:</span>
+                    <span>{formData.sellPut}</span>
+                  </div>
+                  <div className="pnl-row">
+                    <span>Sell Call Strike:</span>
+                    <span>{formData.sellCall}</span>
+                  </div>
+                  <div className="pnl-row">
+                    <span>Result:</span>
+                    <span>
+                      {formData.spxClosePrice > formData.sellPut &&
+                      formData.spxClosePrice < formData.sellCall
+                        ? "MAX PROFIT (SPX between sell strikes)"
+                        : "MAX LOSS (SPX outside sell strikes)"}
+                    </span>
+                  </div>
+                  <div className="pnl-row">
+                    <span>Entry Premium:</span>
+                    <span>
+                      $
+                      {(
+                        formData.entryPremium *
+                        formData.contractQuantity *
+                        100
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  {!(
+                    formData.spxClosePrice > formData.sellPut &&
+                    formData.spxClosePrice < formData.sellCall
+                  ) && (
+                    <div className="pnl-row">
+                      <span>Max Loss (5-wide spread):</span>
+                      <span>
+                        -${(5.0 * formData.contractQuantity * 100).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="pnl-row">
+                    <span>Total Fees:</span>
+                    <span>-${formData.fees.toFixed(2)}</span>
+                  </div>
+                </>
+              ) : (
+                // Standard P&L calculation
+                <>
+                  <div className="pnl-row">
+                    <span>Gross P&L:</span>
+                    <span>
+                      $
+                      {(
+                        (formData.entryPremium - formData.exitPremium) *
+                        formData.contractQuantity *
+                        100
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="pnl-row">
+                    <span>Total Fees:</span>
+                    <span>-${formData.fees.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               <div className="pnl-row total">
                 <span>Net P&L:</span>
                 <span className={calculatePnL() >= 0 ? "profit" : "loss"}>
