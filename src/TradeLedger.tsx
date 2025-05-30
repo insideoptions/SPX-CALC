@@ -45,13 +45,15 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [showAddTrade, setShowAddTrade] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "OPEN" | "CLOSED">("ALL");
+  const [filterStatus, setFilterStatus] = useState<"ALL" | "OPEN" | "CLOSED">(
+    "ALL"
+  );
   const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  
+
   // State for SPX close price dialog
   const [showSpxDialog, setShowSpxDialog] = useState(false);
-  const [spxClosePrice, setSpxClosePrice] = useState<number | ''>('');
+  const [spxClosePrice, setSpxClosePrice] = useState<number | "">("");
   const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
 
   // Fetch trades on component mount
@@ -59,25 +61,25 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     if (user?.email) {
       // Always try to load from API first
       loadTrades();
-      
+
       // As a fallback, check local storage if API fails
       const storedTrades = localStorage.getItem(`trades_${user.email}`);
       if (storedTrades) {
         try {
           const parsedTrades = JSON.parse(storedTrades);
-          console.log('Found trades in local storage as backup:', parsedTrades);
+          console.log("Found trades in local storage as backup:", parsedTrades);
           // We'll use these only if the API call fails (handled in loadTrades)
         } catch (error) {
-          console.error('Error parsing stored trades:', error);
+          console.error("Error parsing stored trades:", error);
         }
       }
     }
   }, [user]);
-  
+
   // Save trades to local storage whenever they change
   useEffect(() => {
     if (user?.email && trades.length > 0) {
-      console.log('Saving trades to local storage:', trades);
+      console.log("Saving trades to local storage:", trades);
       localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
     }
   }, [trades, user?.email]);
@@ -87,32 +89,35 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     try {
       setLoading(true);
       if (user?.email) {
-        console.log('Fetching trades from AWS database for user:', user.email);
+        console.log("Fetching trades from AWS database for user:", user.email);
         const data = await fetchTrades(user.email);
-        console.log('Loaded trades from AWS:', data);
-        
+        console.log("Loaded trades from AWS:", data);
+
         if (data && data.length > 0) {
           setTrades(data);
           if (onTradeUpdate) {
             onTradeUpdate(data);
           }
-          
+
           // Update local storage with the latest data from AWS
           localStorage.setItem(`trades_${user.email}`, JSON.stringify(data));
-          console.log('Updated local storage with AWS data');
+          console.log("Updated local storage with AWS data");
         } else {
           // If no data from API, try local storage as fallback
           const storedTrades = localStorage.getItem(`trades_${user.email}`);
           if (storedTrades) {
             try {
               const parsedTrades = JSON.parse(storedTrades);
-              console.log('Using trades from local storage as fallback:', parsedTrades);
+              console.log(
+                "Using trades from local storage as fallback:",
+                parsedTrades
+              );
               setTrades(parsedTrades);
               if (onTradeUpdate) {
                 onTradeUpdate(parsedTrades);
               }
             } catch (error) {
-              console.error('Error parsing stored trades:', error);
+              console.error("Error parsing stored trades:", error);
               setTrades([]);
             }
           } else {
@@ -122,20 +127,23 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       }
     } catch (error) {
       console.error("Error loading trades from AWS:", error);
-      
+
       // On API failure, try local storage as fallback
       if (user?.email) {
         const storedTrades = localStorage.getItem(`trades_${user.email}`);
         if (storedTrades) {
           try {
             const parsedTrades = JSON.parse(storedTrades);
-            console.log('Using trades from local storage after API failure:', parsedTrades);
+            console.log(
+              "Using trades from local storage after API failure:",
+              parsedTrades
+            );
             setTrades(parsedTrades);
             if (onTradeUpdate) {
               onTradeUpdate(parsedTrades);
             }
           } catch (parseError) {
-            console.error('Error parsing stored trades:', parseError);
+            console.error("Error parsing stored trades:", parseError);
             setTrades([]);
           }
         } else {
@@ -146,203 +154,251 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setLoading(false);
     }
   };
-  
+
   // Add a new trade
   const addTrade = async (tradeData: Partial<Trade>) => {
     try {
-      console.log('Adding new trade to AWS database:', tradeData);
+      console.log("Adding new trade to AWS database:", tradeData);
       // Ensure status is one of the allowed values
       let status: "OPEN" | "CLOSED" | "EXPIRED" = "OPEN";
-      if (tradeData.status && ['OPEN', 'CLOSED', 'EXPIRED'].includes(tradeData.status as string)) {
+      if (
+        tradeData.status &&
+        ["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
+      ) {
         status = tradeData.status as "OPEN" | "CLOSED" | "EXPIRED";
       }
-      
+
       // Create a properly typed new trade object
-      const newTrade: Omit<Trade, 'id'> = {
-        userId: user?.id || '',
-        userEmail: user?.email || '',
-        tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
+      const newTrade: Omit<Trade, "id"> = {
+        userId: user?.id || "",
+        userEmail: user?.email || "",
+        tradeDate:
+          tradeData.tradeDate || new Date().toISOString().split("T")[0],
         entryDate: new Date().toISOString(),
-        level: tradeData.level || 'Level 2',
+        level: tradeData.level || "Level 2",
         contractQuantity: tradeData.contractQuantity || 1,
         entryPremium: tradeData.entryPremium || 0,
         exitPremium: tradeData.exitPremium,
-        tradeType: tradeData.tradeType || 'IRON_CONDOR',
-        strikes: tradeData.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+        tradeType: tradeData.tradeType || "IRON_CONDOR",
+        strikes: tradeData.strikes || {
+          sellPut: 0,
+          buyPut: 0,
+          sellCall: 0,
+          buyCall: 0,
+        },
         status: status,
         pnl: tradeData.pnl,
         fees: tradeData.fees || 6.56,
         notes: tradeData.notes,
         isAutoPopulated: false,
-        matrix: tradeData.matrix || 'standard',
-        buyingPower: tradeData.buyingPower || '$26,350',
+        matrix: tradeData.matrix || "standard",
+        buyingPower: tradeData.buyingPower || "$26,350",
       };
-      
+
       // Close the modal immediately for better UX
       setShowAddTrade(false);
-      
+
       // Show loading indicator
       setLoading(true);
-      
+
       // First try to send to AWS API
-      console.log('Sending trade to AWS database...');
+      console.log("Sending trade to AWS database...");
       const createdTrade = await createTrade(newTrade);
-      
+
       if (createdTrade) {
-        console.log('Successfully created trade in AWS database:', createdTrade);
-        
+        console.log(
+          "Successfully created trade in AWS database:",
+          createdTrade
+        );
+
         // Update state with the new trade from the server
         const updatedTrades = [...trades, createdTrade];
         setTrades(updatedTrades);
-        
+
         // Update local storage with the latest data including the server-generated trade
         if (user?.email) {
-          localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTrades));
-          console.log('Updated local storage with AWS data');
+          localStorage.setItem(
+            `trades_${user.email}`,
+            JSON.stringify(updatedTrades)
+          );
+          console.log("Updated local storage with AWS data");
         }
-        
+
         // Reload trades from server to ensure we have the latest data
         loadTrades();
       } else {
         // API call failed or returned null, use local fallback
-        console.warn('AWS database did not return a created trade, using local fallback');
-        
+        console.warn(
+          "AWS database did not return a created trade, using local fallback"
+        );
+
         // Generate a local ID for the trade
-        const localId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+        const localId =
+          Date.now().toString(36) + Math.random().toString(36).substring(2);
         const localTrade: Trade = {
-          ...newTrade as any,
-          id: localId
+          ...(newTrade as any),
+          id: localId,
         };
-        
+
         // Update UI with local version
         const updatedTrades = [...trades, localTrade];
         setTrades(updatedTrades);
-        
+
         // Save to local storage for persistence
         if (user?.email) {
-          localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTrades));
-          console.log('Saved trade to local storage as fallback');
+          localStorage.setItem(
+            `trades_${user.email}`,
+            JSON.stringify(updatedTrades)
+          );
+          console.log("Saved trade to local storage as fallback");
         }
       }
     } catch (error) {
-      console.error('Error adding trade:', error);
-      alert('Failed to add trade to AWS database. The trade may be saved locally but will not sync across devices.');
-      
+      console.error("Error adding trade:", error);
+      alert(
+        "Failed to add trade to AWS database. The trade may be saved locally but will not sync across devices."
+      );
+
       // Generate a local ID for the trade as fallback
-      const localId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const localId =
+        Date.now().toString(36) + Math.random().toString(36).substring(2);
       const localTrade: Trade = {
-        ...{
-          userId: user?.id || '',
-          userEmail: user?.email || '',
-          tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
+        ...({
+          userId: user?.id || "",
+          userEmail: user?.email || "",
+          tradeDate:
+            tradeData.tradeDate || new Date().toISOString().split("T")[0],
           entryDate: new Date().toISOString(),
-          level: tradeData.level || 'Level 2',
+          level: tradeData.level || "Level 2",
           contractQuantity: tradeData.contractQuantity || 1,
           entryPremium: tradeData.entryPremium || 0,
           exitPremium: tradeData.exitPremium,
-          tradeType: tradeData.tradeType || 'IRON_CONDOR',
-          strikes: tradeData.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+          tradeType: tradeData.tradeType || "IRON_CONDOR",
+          strikes: tradeData.strikes || {
+            sellPut: 0,
+            buyPut: 0,
+            sellCall: 0,
+            buyCall: 0,
+          },
           status: "OPEN",
           pnl: tradeData.pnl,
           fees: tradeData.fees || 6.56,
           notes: tradeData.notes,
           isAutoPopulated: false,
-          matrix: tradeData.matrix || 'standard',
-          buyingPower: tradeData.buyingPower || '$26,350',
-        } as any,
-        id: localId
+          matrix: tradeData.matrix || "standard",
+          buyingPower: tradeData.buyingPower || "$26,350",
+        } as any),
+        id: localId,
       };
-      
+
       // Update UI with local version
       const updatedTrades = [...trades, localTrade];
       setTrades(updatedTrades);
-      
+
       // Save to local storage for persistence
       if (user?.email) {
-        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTrades));
-        console.log('Saved trade to local storage after AWS error');
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
+        );
+        console.log("Saved trade to local storage after AWS error");
       }
     } finally {
       setLoading(false);
     }
   };
-  
+
   // Update an existing trade
   const updateExistingTrade = async (tradeData: Partial<Trade>) => {
     if (!tradeData.id) return;
-    
+
     try {
-      console.log('Updating trade:', tradeData);
+      console.log("Updating trade:", tradeData);
       // Ensure all required properties are present before updating
-      if (typeof tradeData.status === 'string' && 
-          !['OPEN', 'CLOSED', 'EXPIRED'].includes(tradeData.status as string)) {
+      if (
+        typeof tradeData.status === "string" &&
+        !["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
+      ) {
         // Fix any invalid status values
-        tradeData.status = 'OPEN' as 'OPEN' | 'CLOSED' | 'EXPIRED';
+        tradeData.status = "OPEN" as "OPEN" | "CLOSED" | "EXPIRED";
       }
-      
+
       // Update local state immediately
-      const updatedTrades = trades.map((t: Trade) => t.id === tradeData.id ? {...t, ...tradeData} as Trade : t);
+      const updatedTrades = trades.map((t: Trade) =>
+        t.id === tradeData.id ? ({ ...t, ...tradeData } as Trade) : t
+      );
       setTrades(updatedTrades);
       setEditingTrade(null);
-      
+
       // Save to local storage immediately
       if (user?.email) {
-        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTrades));
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
+        );
       }
-      
+
       // Try to update on the server
       try {
         // Cast to Trade type for the API call
         const updatedTrade = await updateTrade(tradeData as Trade);
         if (updatedTrade) {
           // Update with server response
-          const serverUpdatedTrades = trades.map((t: Trade) => t.id === updatedTrade.id ? updatedTrade : t);
+          const serverUpdatedTrades = trades.map((t: Trade) =>
+            t.id === updatedTrade.id ? updatedTrade : t
+          );
           setTrades(serverUpdatedTrades);
-          
+
           // Update local storage with server data
           if (user?.email) {
-            localStorage.setItem(`trades_${user.email}`, JSON.stringify(serverUpdatedTrades));
+            localStorage.setItem(
+              `trades_${user.email}`,
+              JSON.stringify(serverUpdatedTrades)
+            );
           }
         }
       } catch (apiError) {
-        console.error('API error when updating trade:', apiError);
+        console.error("API error when updating trade:", apiError);
         // Trade is already updated locally, so we don't need to alert the user
-        console.log('Trade was updated locally but not on the server');
+        console.log("Trade was updated locally but not on the server");
       }
     } catch (error) {
-      console.error('Error updating trade:', error);
-      alert('Failed to update trade. Please try again.');
+      console.error("Error updating trade:", error);
+      alert("Failed to update trade. Please try again.");
     }
   };
-  
+
   // Delete a trade
   const removeTrade = async (tradeId: string) => {
     try {
-      console.log('Deleting trade:', tradeId);
-      
+      console.log("Deleting trade:", tradeId);
+
       // Remove from local state immediately
-      const updatedTrades = trades.filter(t => t.id !== tradeId);
+      const updatedTrades = trades.filter((t) => t.id !== tradeId);
       setTrades(updatedTrades);
-      
+
       // Update local storage immediately
       if (user?.email) {
-        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTrades));
+        localStorage.setItem(
+          `trades_${user.email}`,
+          JSON.stringify(updatedTrades)
+        );
       }
-      
+
       // Try to delete on the server
       try {
         const success = await deleteTrade(tradeId);
         if (!success) {
-          console.warn('API returned unsuccessful status when deleting trade');
+          console.warn("API returned unsuccessful status when deleting trade");
         }
       } catch (apiError) {
-        console.error('API error when deleting trade:', apiError);
+        console.error("API error when deleting trade:", apiError);
         // Trade is already deleted locally, so we don't need to alert the user
-        console.log('Trade was deleted locally but not on the server');
+        console.log("Trade was deleted locally but not on the server");
       }
     } catch (error) {
-      console.error('Error deleting trade:', error);
-      alert('Failed to delete trade. Please try again.');
+      console.error("Error deleting trade:", error);
+      alert("Failed to delete trade. Please try again.");
     }
   };
 
@@ -351,31 +407,35 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     if (!trade.spxClosePrice || trade.tradeType !== "IRON_CONDOR") {
       return false;
     }
-    
+
     // Check if SPX closed between the two sell sides
-    return trade.spxClosePrice > trade.strikes.sellPut && 
-           trade.spxClosePrice < trade.strikes.sellCall;
+    return (
+      trade.spxClosePrice > trade.strikes.sellPut &&
+      trade.spxClosePrice < trade.strikes.sellCall
+    );
   };
-  
+
   // Calculate P&L for a trade
   const calculatePnL = (trade: Trade): number => {
     if (trade.status === "OPEN") {
       return 0;
     }
-    
+
     // If we have SPX close price and it's between sell sides, it's max profit
     if (trade.spxClosePrice && isMaxProfit(trade)) {
       // Max profit is the full premium received minus fees
-      const maxProfit = trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
+      const maxProfit =
+        trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
       return maxProfit;
     }
-    
+
     // Otherwise calculate based on entry and exit premiums
     if (trade.exitPremium) {
-      const grossPnL = (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
+      const grossPnL =
+        (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
       return grossPnL - trade.fees;
     }
-    
+
     return 0;
   };
 
@@ -483,7 +543,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <label>Filter:</label>
           <select
             value={filterStatus}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value as "ALL" | "OPEN" | "CLOSED")}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setFilterStatus(e.target.value as "ALL" | "OPEN" | "CLOSED")
+            }
             className="filter-select"
           >
             <option value="ALL">All Trades</option>
@@ -496,7 +558,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <label>Sort by:</label>
           <select
             value={sortBy}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSortBy(e.target.value as "date" | "level" | "pnl")}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSortBy(e.target.value as "date" | "level" | "pnl")
+            }
             className="sort-select"
           >
             <option value="date">Date</option>
@@ -549,23 +613,34 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 </td>
                 <td>{trade.tradeType.replace("_", " ")}</td>
                 <td>{trade.contractQuantity}</td>
-                <td>{trade.strikes?.sellPut || '-'}</td>
-                <td>{trade.strikes?.sellCall || '-'}</td>
+                <td>{trade.strikes?.sellPut || "-"}</td>
+                <td>{trade.strikes?.sellCall || "-"}</td>
                 <td>{trade.entryPremium.toFixed(2)}</td>
                 <td>
-                  {trade.exitPremium !== undefined ? trade.exitPremium.toFixed(2) : "-"}
+                  {trade.exitPremium !== undefined ||
+                  (trade.isMaxProfit && trade.status === "CLOSED")
+                    ? trade.exitPremium !== undefined
+                      ? trade.exitPremium.toFixed(2)
+                      : "0.00"
+                    : "-"}
                 </td>
                 <td>
                   {trade.spxClosePrice ? (
-                    <span className={`spx-close ${trade.isMaxProfit ? "spx-win" : "spx-loss"}`}>
+                    <span
+                      className={`spx-close ${
+                        trade.isMaxProfit ? "spx-win" : "spx-loss"
+                      }`}
+                    >
                       {trade.spxClosePrice}
                       {trade.tradeType === "IRON_CONDOR" && (
-                        <span className="spx-indicator"> 
+                        <span className="spx-indicator">
                           {trade.isMaxProfit ? "✓" : "✗"}
                         </span>
                       )}
                     </span>
-                  ) : "-"}
+                  ) : (
+                    "-"
+                  )}
                 </td>
                 <td>
                   <span
@@ -591,7 +666,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         // For iron condors, show SPX close price dialog
                         if (trade.tradeType === "IRON_CONDOR") {
                           setTradeToClose(trade);
-                          setSpxClosePrice('');
+                          setSpxClosePrice("");
                           setShowSpxDialog(true);
                         } else {
                           // For other trade types, just close directly
@@ -599,7 +674,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                             ...trade,
                             status: "CLOSED",
                             exitDate: new Date().toISOString(),
-                            exitPremium: trade.exitPremium || 0 // Ensure exitPremium is set
+                            exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
                           };
                           updateExistingTrade(tradeToClose);
                         }
@@ -626,56 +701,68 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </div>
         )}
       </div>
-      
+
       {/* Trade Form Modal - Simplified Version */}
       {showAddTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="trade-form-header">
               <h3>Add New Trade</h3>
-              <button className="close-button" onClick={() => setShowAddTrade(false)}>×</button>
+              <button
+                className="close-button"
+                onClick={() => setShowAddTrade(false)}
+              >
+                ×
+              </button>
             </div>
-            
+
             <TradeForm
               onSave={(tradeData: Partial<Trade>) => {
-                console.log('Trade form submitted with data:', tradeData);
+                console.log("Trade form submitted with data:", tradeData);
                 addTrade(tradeData);
               }}
               onCancel={() => setShowAddTrade(false)}
             />
-            
+
             {/* Emergency Add Button - Direct handler outside the form */}
-            <div style={{ padding: '20px', textAlign: 'center', borderTop: '1px solid #eee', marginTop: '20px' }}>
-              <button 
+            <div
+              style={{
+                padding: "20px",
+                textAlign: "center",
+                borderTop: "1px solid #eee",
+                marginTop: "20px",
+              }}
+            >
+              <button
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#4CAF50',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px'
+                  padding: "10px 20px",
+                  backgroundColor: "#4CAF50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "16px",
                 }}
                 onClick={() => {
-                  console.log('Emergency add button clicked');
+                  console.log("Emergency add button clicked");
                   // Create a minimal trade
                   const minimalTrade: Partial<Trade> = {
-                    tradeDate: new Date().toISOString().split('T')[0],
-                    level: 'Level 2',
+                    tradeDate: new Date().toISOString().split("T")[0],
+                    level: "Level 2",
                     contractQuantity: 1,
                     entryPremium: 1.0,
-                    tradeType: 'IRON_CONDOR',
+                    tradeType: "IRON_CONDOR",
                     strikes: {
                       buyPut: 4900,
                       sellPut: 4950,
                       sellCall: 5000,
-                      buyCall: 5050
+                      buyCall: 5050,
                     },
-                    status: 'OPEN',
+                    status: "OPEN",
                     fees: 6.56,
-                    notes: 'Added via emergency button',
-                    matrix: 'standard',
-                    buyingPower: '$26,350'
+                    notes: "Added via emergency button",
+                    matrix: "standard",
+                    buyingPower: "$26,350",
                   };
                   addTrade(minimalTrade);
                 }}
@@ -686,7 +773,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           </div>
         </div>
       )}
-      
+
       {/* Edit Trade Modal */}
       {editingTrade && (
         <div className="modal-overlay">
@@ -695,74 +782,98 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               trade={editingTrade}
               onSave={updateExistingTrade}
               onCancel={() => setEditingTrade(null)}
-              isClosing={editingTrade.status === "CLOSED" && !editingTrade.exitDate}
+              isClosing={
+                editingTrade.status === "CLOSED" && !editingTrade.exitDate
+              }
             />
           </div>
         </div>
       )}
-      
+
       {/* SPX Close Price Dialog */}
       {showSpxDialog && tradeToClose && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '500px', padding: '30px' }}>
+          <div
+            className="modal-content"
+            style={{ maxWidth: "500px", padding: "30px" }}
+          >
             <div className="trade-form-header">
               <h3>Enter SPX Close Price</h3>
-              <button className="close-button" onClick={() => setShowSpxDialog(false)}>×</button>
+              <button
+                className="close-button"
+                onClick={() => setShowSpxDialog(false)}
+              >
+                ×
+              </button>
             </div>
-            
-            <div style={{ padding: '20px' }}>
-              <p style={{ marginBottom: '15px' }}>
-                Enter the SPX close price to determine if this iron condor achieved maximum profit.
+
+            <div style={{ padding: "20px" }}>
+              <p style={{ marginBottom: "15px" }}>
+                Enter the SPX close price to determine if this iron condor
+                achieved maximum profit.
               </p>
-              
-              <div style={{ marginBottom: '15px' }}>
-                <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Trade Details:</p>
+
+              <div style={{ marginBottom: "15px" }}>
+                <p style={{ marginBottom: "10px", fontWeight: "bold" }}>
+                  Trade Details:
+                </p>
                 <p>Sell Put: {tradeToClose.strikes.sellPut}</p>
                 <p>Sell Call: {tradeToClose.strikes.sellCall}</p>
                 <p>Entry Premium: ${tradeToClose.entryPremium.toFixed(2)}</p>
                 <p>Contracts: {tradeToClose.contractQuantity}</p>
               </div>
-              
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: "5px",
+                    fontWeight: "bold",
+                  }}
+                >
                   SPX Close Price:
                 </label>
                 <input
                   type="number"
                   value={spxClosePrice}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSpxClosePrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setSpxClosePrice(
+                      e.target.value === "" ? "" : parseFloat(e.target.value)
+                    )
+                  }
                   style={{
-                    width: '100%',
-                    padding: '10px',
-                    fontSize: '16px',
-                    borderRadius: '4px',
-                    border: '1px solid #ccc'
+                    width: "100%",
+                    padding: "10px",
+                    fontSize: "16px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
                   }}
                   placeholder="Enter SPX close price"
                 />
               </div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <button
                   onClick={() => setShowSpxDialog(false)}
                   style={{
-                    padding: '10px 20px',
-                    backgroundColor: '#f3f4f6',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
+                    padding: "10px 20px",
+                    backgroundColor: "#f3f4f6",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                    cursor: "pointer",
                   }}
                 >
                   Cancel
                 </button>
-                
+
                 <button
                   onClick={() => {
-                    if (spxClosePrice !== '') {
+                    if (spxClosePrice !== "") {
                       // Check if SPX closed between sell sides
-                      const isMaxProfitAchieved = spxClosePrice > tradeToClose.strikes.sellPut && 
-                                                  spxClosePrice < tradeToClose.strikes.sellCall;
-                      
+                      const isMaxProfitAchieved =
+                        spxClosePrice > tradeToClose.strikes.sellPut &&
+                        spxClosePrice < tradeToClose.strikes.sellCall;
+
                       // Create a copy of the trade with updated status and SPX close price
                       const updatedTrade: Trade = {
                         ...tradeToClose,
@@ -772,22 +883,25 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         isMaxProfit: isMaxProfitAchieved,
                         // If max profit, exit premium is 0 (kept all premium)
                         // Otherwise, use existing exit premium or default to half the entry premium
-                        exitPremium: isMaxProfitAchieved ? 0 : (tradeToClose.exitPremium || tradeToClose.entryPremium / 2)
+                        exitPremium: isMaxProfitAchieved
+                          ? 0
+                          : tradeToClose.exitPremium ||
+                            tradeToClose.entryPremium / 2,
                       };
-                      
+
                       // Update the trade
                       updateExistingTrade(updatedTrade);
                       setShowSpxDialog(false);
                     }
                   }}
-                  disabled={spxClosePrice === ''}
+                  disabled={spxClosePrice === ""}
                   style={{
-                    padding: '10px 20px',
-                    backgroundColor: spxClosePrice === '' ? '#ccc' : '#6366f1',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: spxClosePrice === '' ? 'not-allowed' : 'pointer'
+                    padding: "10px 20px",
+                    backgroundColor: spxClosePrice === "" ? "#ccc" : "#6366f1",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: spxClosePrice === "" ? "not-allowed" : "pointer",
                   }}
                 >
                   Close Trade
@@ -848,15 +962,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             <div className="trade-card-actions">
               <button onClick={() => setEditingTrade(trade)}>Edit</button>
               {trade.status === "OPEN" && (
-                <button onClick={() => {
-                  // Create a properly typed trade object for closing
-                  const tradeToClose: Trade = {
-                    ...trade,
-                    status: "CLOSED",
-                    exitDate: new Date().toISOString()
-                  };
-                  setEditingTrade(tradeToClose);
-                }}>
+                <button
+                  onClick={() => {
+                    // Create a properly typed trade object for closing
+                    const tradeToClose: Trade = {
+                      ...trade,
+                      status: "CLOSED",
+                      exitDate: new Date().toISOString(),
+                    };
+                    setEditingTrade(tradeToClose);
+                  }}
+                >
                   Close Trade
                 </button>
               )}
