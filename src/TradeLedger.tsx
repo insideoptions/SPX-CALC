@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
 import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
 import "./TradeLedger.css";
+
+// Define interfaces for auth context and user
+interface User {
+  email: string | null;
+  id?: string; // Support for old code using id
+  uid?: string; // Support for new code using uid
+}
 
 // Trade interface
 export interface Trade {
@@ -40,253 +47,349 @@ interface TradeLedgerProps {
   onTradeUpdate?: (trades: Trade[]) => void;
 }
 
+// Helper function to assign series IDs to trades based on common attributes
+const assignSeriesToTrades = (trades: Trade[]): Trade[] => {
+  if (!trades || trades.length === 0) {
+    return [];
+  }
+
+  // Create a copy of trades to avoid mutating the original
+  const tradesWithSeries = [...trades];
+
+  // Group trades by their common attributes
+  const tradeGroups: { [key: string]: Trade[] } = {};
+
+  tradesWithSeries.forEach((trade) => {
+    // Create a unique key based on trade attributes that define a series
+    const seriesKey = `${trade.tradeType}_${trade.level}_${trade.strikes.sellPut}_${trade.strikes.buyPut}_${trade.strikes.sellCall}_${trade.strikes.buyCall}`;
+
+    if (!tradeGroups[seriesKey]) {
+      tradeGroups[seriesKey] = [];
+    }
+
+    tradeGroups[seriesKey].push(trade);
+  });
+
+  // Assign series IDs to trades in each group
+  Object.entries(tradeGroups).forEach(([seriesKey, groupTrades]) => {
+    // Only create a series if there are multiple trades with the same attributes
+    if (groupTrades.length > 1) {
+      // Use the earliest trade date as the basis for the series ID
+      const sortedByDate = [...groupTrades].sort(
+        (a, b) =>
+          new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime()
+      );
+
+      const seriesId = `series_${sortedByDate[0].id}`;
+
+      // Assign the series ID to all trades in this group
+      groupTrades.forEach((trade) => {
+        const tradeIndex = tradesWithSeries.findIndex((t) => t.id === trade.id);
+        if (tradeIndex >= 0) {
+          tradesWithSeries[tradeIndex] = {
+            ...tradesWithSeries[tradeIndex],
+            seriesId,
+          };
+        }
+      });
+    }
+  });
+
+  return tradesWithSeries;
+};
+
+// Main component
 const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
+  // Get user from auth context
   const { user } = useAuth();
+
+  // State for trades and UI
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddTrade, setShowAddTrade] = useState(false);
-  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"ALL" | "OPEN" | "CLOSED">(
-    "ALL"
-  );
-  const [sortBy, setSortBy] = useState<"date" | "level" | "pnl">("date");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [groupBySeries, setGroupBySeries] = useState<boolean>(true);
-
-  // State for SPX close price dialog
-  const [showSpxDialog, setShowSpxDialog] = useState(false);
-  const [spxClosePrice, setSpxClosePrice] = useState<number | "">("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [showAddTrade, setShowAddTrade] = useState<boolean>(false);
+  const [tradeToEdit, setTradeToEdit] = useState<Trade | null>(null);
   const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
+  const [showSpxDialog, setShowSpxDialog] = useState<boolean>(false);
+  const [spxClosePrice, setSpxClosePrice] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [groupBySeries, setGroupBySeries] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // Function to identify and assign series to trades
-  const assignSeriesToTrades = (tradesToProcess: Trade[]): Trade[] => {
-    if (!tradesToProcess || tradesToProcess.length === 0) return [];
+  // Ref to track if sync is in progress to prevent multiple syncs
+  const syncInProgressRef = useRef<boolean>(false);
 
-    // Sort trades by date
-    const sortedTrades = [...tradesToProcess].sort(
-      (a, b) =>
-        new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime()
-    );
-
-    let currentSeriesId = `series_${Date.now()}`;
-    let lastTradeDate: Date | null = null;
-
-    return sortedTrades.map((trade, index) => {
-      const tradeDate = new Date(trade.tradeDate);
-
-      // If this is the first trade or there's a gap of more than 1 day from the last trade,
-      // start a new series
-      if (
-        index === 0 ||
-        !lastTradeDate ||
-        tradeDate.getTime() - lastTradeDate.getTime() > 24 * 60 * 60 * 1000
-      ) {
-        currentSeriesId = `series_${Date.now()}_${index}`;
-      }
-
-      lastTradeDate = tradeDate;
-
-      // Return trade with series ID
-      return {
-        ...trade,
-        seriesId: trade.seriesId || currentSeriesId,
-      };
-    });
-  };
-
-  // Fetch trades on component mount
-  useEffect(() => {
-    if (user?.email) {
-      // Always try to load from API first
-      loadTrades();
-
-      // As a fallback, check local storage if API fails
-      const storedTrades = localStorage.getItem(`trades_${user.email}`);
-      if (storedTrades) {
-        try {
-          const parsedTrades = JSON.parse(storedTrades);
-          console.log("Found trades in local storage as backup:", parsedTrades);
-          // We'll use these only if the API call fails (handled in loadTrades)
-        } catch (error) {
-          console.error("Error parsing stored trades:", error);
-        }
-      }
-    }
-  }, [user]);
-
-  // Save trades to local storage and sync with AWS whenever they change
-  useEffect(() => {
-    if (user?.email && trades.length > 0) {
-      console.log("Saving trades to local storage:", trades);
-      localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
-
-      // Also ensure all trades are synced with AWS
-      const syncTradesWithAWS = async () => {
-        console.log("Syncing all trades with AWS database...");
-
-        // For each trade, make sure it exists in AWS
-        for (const trade of trades) {
-          try {
-            // Check if this trade was created locally (has a temporary ID)
-            const isLocalTrade = trade.id.includes("local_");
-
-            if (isLocalTrade) {
-              console.log("Found local trade that needs to be synced:", trade);
-              // Create a new trade in AWS without the ID
-              const { id, ...tradeWithoutId } = trade;
-              const createdTrade = await createTrade(tradeWithoutId as any);
-
-              if (createdTrade) {
-                console.log(
-                  "Successfully synced local trade to AWS:",
-                  createdTrade
-                );
-                // Update the local trade with the AWS ID
-                // This will be handled in a separate effect
-              }
-            }
-          } catch (error) {
-            console.error("Error syncing trade with AWS:", error);
-          }
-        }
-      };
-
-      // Run the sync operation
-      syncTradesWithAWS();
-    }
-  }, [trades, user?.email]);
-
-  // Function to sync local trades to AWS
+  // Sync local trades with AWS
   const syncLocalTradesWithAWS = async () => {
-    if (!user?.email) return;
+    if (!user?.email || syncInProgressRef.current) {
+      console.log("Sync already in progress or no user email, skipping sync");
+      return;
+    }
+
+    syncInProgressRef.current = true;
+    console.log("Starting sync of local trades with AWS...");
 
     try {
       // Get trades from local storage
-      const storedTrades = localStorage.getItem(`trades_${user.email}`);
-      if (!storedTrades) return;
+      const localStorageKey = `trades_${user.email}`;
+      const storedData = localStorage.getItem(localStorageKey);
 
-      const localTrades: Trade[] = JSON.parse(storedTrades);
-      console.log("Checking local trades for AWS sync:", localTrades);
+      if (!storedData) {
+        console.log("No local trades found to sync");
+        syncInProgressRef.current = false;
+        return;
+      }
 
-      // Find trades that are only in local storage (have local_ prefix)
-      const localOnlyTrades = localTrades.filter((trade) =>
-        trade.id.startsWith("local_")
+      const localTrades: Trade[] = JSON.parse(storedData);
+
+      // Find local-only trades (those with IDs starting with "local_" or containing "_modified")
+      const localOnlyTrades = localTrades.filter(
+        (trade) =>
+          trade.id.startsWith("local_") || trade.id.includes("_modified")
+      );
+
+      if (localOnlyTrades.length === 0) {
+        console.log("No local-only trades found to sync");
+        syncInProgressRef.current = false;
+        return;
+      }
+
+      console.log(
+        `Found ${localOnlyTrades.length} local trades to sync with AWS`
+      );
+
+      // Sync each local trade to AWS with retry logic
+      for (const localTrade of localOnlyTrades) {
+        let awsSuccess = false;
+        let currentRetry = 0;
+        const maxRetries = 3;
+
+        while (currentRetry < maxRetries && !awsSuccess) {
+          try {
+            console.log(
+              `Syncing trade ${localTrade.id} to AWS (attempt ${
+                currentRetry + 1
+              }/${maxRetries})...`
+            );
+
+            let awsTrade: Trade | null = null;
+
+            if (localTrade.id.startsWith("local_")) {
+              // This is a new trade that needs to be created in AWS
+              awsTrade = await createTrade({
+                ...localTrade,
+                userEmail: user.email,
+                userId: user.id || user.uid || "",
+              });
+            } else if (localTrade.id.includes("_modified")) {
+              // This is a modified trade that needs to be updated in AWS
+              const originalId = localTrade.id.split("_modified")[0];
+              awsTrade = await updateTrade({
+                ...localTrade,
+                id: originalId, // Use the original ID for the update
+                userEmail: user.email,
+                userId: user.id || user.uid || "",
+              });
+            }
+
+            if (awsTrade) {
+              console.log(`Successfully synced trade ${localTrade.id} to AWS`);
+
+              // Update the local trade with the AWS version
+              const updatedLocalTrades = localTrades.map((trade) =>
+                trade.id === localTrade.id ? awsTrade! : trade
+              );
+
+              // Update local storage and state
+              localStorage.setItem(
+                localStorageKey,
+                JSON.stringify(updatedLocalTrades)
+              );
+
+              const updatedTradesWithSeries =
+                assignSeriesToTrades(updatedLocalTrades);
+              setTrades(updatedTradesWithSeries);
+
+              if (onTradeUpdate) {
+                onTradeUpdate(updatedTradesWithSeries);
+              }
+
+              awsSuccess = true;
+            }
+          } catch (error) {
+            console.error(
+              `Error syncing trade to AWS (attempt ${
+                currentRetry + 1
+              }/${maxRetries}):`,
+              error
+            );
+            // Exponential backoff for retries
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
+            );
+          }
+
+          currentRetry++;
+        }
+
+        if (!awsSuccess) {
+          console.error(
+            `Failed to sync trade ${localTrade.id} after ${maxRetries} attempts`
+          );
+        }
+      }
+
+      console.log("Completed sync of local trades with AWS");
+      setLastSyncTime(new Date());
+    } catch (error) {
+      console.error("Error in syncLocalTradesWithAWS:", error);
+    } finally {
+      syncInProgressRef.current = false;
+    }
+  };
+
+  // Load trades with robust handling of local and AWS data
+  const loadTrades = async () => {
+    if (!user?.email) {
+      console.error("Cannot load trades: No user email");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    console.log("Loading trades for user:", user.email);
+
+    try {
+      // First load from local storage for immediate display
+      const localStorageKey = `trades_${user.email}`;
+      const storedData = localStorage.getItem(localStorageKey);
+      let localTrades: Trade[] = [];
+
+      if (storedData) {
+        try {
+          localTrades = JSON.parse(storedData);
+          console.log("Loaded trades from local storage:", localTrades.length);
+
+          // Update state with local trades immediately for fast UI response
+          const tradesWithSeries = assignSeriesToTrades(localTrades);
+          setTrades(tradesWithSeries);
+          if (onTradeUpdate) {
+            onTradeUpdate(tradesWithSeries);
+          }
+        } catch (error) {
+          console.error("Error parsing local trades:", error);
+        }
+      }
+
+      // Then fetch from AWS with cache busting
+      console.log("Fetching trades from AWS...");
+      const awsTrades = await fetchTrades(user.email);
+      console.log("Fetched trades from AWS:", awsTrades.length);
+
+      // Merge AWS trades with local trades, preferring AWS versions
+      const mergedTrades = [...localTrades];
+      let hasChanges = false;
+
+      // Update with AWS trades
+      if (awsTrades && awsTrades.length > 0) {
+        awsTrades.forEach((awsTrade) => {
+          const localIndex = mergedTrades.findIndex(
+            (t) => t.id === awsTrade.id
+          );
+
+          if (localIndex >= 0) {
+            // Trade exists locally, check if it's different
+            if (
+              JSON.stringify(mergedTrades[localIndex]) !==
+              JSON.stringify(awsTrade)
+            ) {
+              mergedTrades[localIndex] = awsTrade;
+              hasChanges = true;
+            }
+          } else {
+            // New trade from AWS, add it
+            mergedTrades.push(awsTrade);
+            hasChanges = true;
+          }
+        });
+      }
+
+      // Check for local trades that need to be synced to AWS
+      const localOnlyTrades = mergedTrades.filter(
+        (trade) =>
+          trade.id.startsWith("local_") || trade.id.includes("_modified")
       );
 
       if (localOnlyTrades.length > 0) {
         console.log(
-          "Found local-only trades to sync with AWS:",
-          localOnlyTrades.length
+          "Found",
+          localOnlyTrades.length,
+          "local trades that need to be synced to AWS"
         );
-
-        // Create a copy of the trades array to update
-        let updatedTrades = [...trades];
-
-        // Sync each local trade to AWS
-        for (const localTrade of localOnlyTrades) {
-          try {
-            console.log("Syncing local trade to AWS:", localTrade);
-
-            // Remove the id so a new one is generated by AWS
-            const { id, ...tradeWithoutId } = localTrade;
-            const awsTrade = await createTrade(tradeWithoutId as any);
-
-            if (awsTrade) {
-              console.log("Successfully synced local trade to AWS:", awsTrade);
-
-              // Replace the local trade with the AWS one in our array
-              updatedTrades = updatedTrades.map((t: Trade) =>
-                t.id === localTrade.id ? awsTrade : t
-              );
-            }
-          } catch (syncError) {
-            console.error("Failed to sync local trade to AWS:", syncError);
-          }
-        }
-
-        // Update the trades state with the AWS versions
-        setTrades(updatedTrades);
-
-        // Update local storage with the updated trades
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTrades)
-        );
+        // Trigger background sync
+        setTimeout(() => {
+          syncLocalTradesWithAWS();
+        }, 1000);
       }
-    } catch (error) {
-      console.error("Error syncing local trades with AWS:", error);
-    }
-  };
 
-  // Load trades from API
-  const loadTrades = async () => {
-    try {
-      setLoading(true);
-      if (user?.email) {
-        console.log("Fetching trades from AWS database for user:", user.email);
-        const data = await fetchTrades(user.email);
-        console.log("Loaded trades from AWS:", data);
+      // Update local storage and state if there were changes
+      if (hasChanges) {
+        console.log("Updating local storage with merged trades");
+        localStorage.setItem(localStorageKey, JSON.stringify(mergedTrades));
 
-        // Get local storage trades as well
-        let localTrades: Trade[] = [];
-        const storedTrades = localStorage.getItem(`trades_${user.email}`);
-        if (storedTrades) {
-          try {
-            localTrades = JSON.parse(storedTrades);
-            console.log("Found trades in local storage:", localTrades);
-          } catch (error) {
-            console.error("Error parsing stored trades:", error);
-          }
-        }
-
-        // Determine which data to use
-        let finalTrades: Trade[] = [];
-
-        if (data && data.length > 0) {
-          // We have API data
-          finalTrades = data;
-          console.log("Using API data as primary source");
-
-          // If we have local trades that aren't in the API data, we should sync them
-          if (localTrades.length > 0) {
-            // Find trades in local storage that aren't in the API data
-            const apiTradeIds = new Set(data.map((t: Trade) => t.id));
-            const localOnlyTrades = localTrades.filter(
-              (t: Trade) => !apiTradeIds.has(t.id) || t.id.startsWith("local_")
-            );
-
-            if (localOnlyTrades.length > 0) {
-              console.log(
-                "Found local-only trades that need to be synced:",
-                localOnlyTrades
-              );
-              // We'll add these to our final trades list
-              finalTrades = [...finalTrades, ...localOnlyTrades];
-            }
-          }
-        } else if (localTrades.length > 0) {
-          // No API data but we have local data
-          finalTrades = localTrades;
-          console.log("Using local storage data as fallback");
-        }
-
-        // Assign series to trades
-        const tradesWithSeries = assignSeriesToTrades(finalTrades);
+        const tradesWithSeries = assignSeriesToTrades(mergedTrades);
         setTrades(tradesWithSeries);
         if (onTradeUpdate) {
           onTradeUpdate(tradesWithSeries);
         }
-
-        // Always update local storage with our final dataset
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(tradesWithSeries)
-        );
-
-        // Explicitly sync any local trades to AWS
-        // This will handle updating the IDs and ensuring all trades are in AWS
-        await syncLocalTradesWithAWS();
       }
+
+      // Do a secondary fetch after a delay to ensure we have the latest data
+      setTimeout(async () => {
+        try {
+          const latestAwsTrades = await fetchTrades(user.email!);
+          if (latestAwsTrades && latestAwsTrades.length > 0) {
+            const currentTrades = [...mergedTrades];
+            let secondaryChanges = false;
+
+            latestAwsTrades.forEach((awsTrade) => {
+              const index = currentTrades.findIndex(
+                (t) => t.id === awsTrade.id
+              );
+              if (index >= 0) {
+                // Check if different
+                if (
+                  JSON.stringify(currentTrades[index]) !==
+                  JSON.stringify(awsTrade)
+                ) {
+                  currentTrades[index] = awsTrade;
+                  secondaryChanges = true;
+                }
+              } else {
+                // New trade
+                currentTrades.push(awsTrade);
+                secondaryChanges = true;
+              }
+            });
+
+            if (secondaryChanges) {
+              console.log("Secondary fetch found changes, updating...");
+              localStorage.setItem(
+                localStorageKey,
+                JSON.stringify(currentTrades)
+              );
+
+              const updatedTradesWithSeries =
+                assignSeriesToTrades(currentTrades);
+              setTrades(updatedTradesWithSeries);
+              if (onTradeUpdate) {
+                onTradeUpdate(updatedTradesWithSeries);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error in secondary fetch:", error);
+        }
+      }, 2000);
     } catch (error) {
       console.error("Error loading trades:", error);
 
@@ -297,957 +400,718 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           try {
             const parsedTrades = JSON.parse(storedTrades);
             console.log(
-              "API failed, using trades from local storage:",
-              parsedTrades
+              "API failed, using local storage as fallback:",
+              parsedTrades.length
             );
-
-            // Assign series to trades from local storage
             const tradesWithSeries = assignSeriesToTrades(parsedTrades);
             setTrades(tradesWithSeries);
             if (onTradeUpdate) {
               onTradeUpdate(tradesWithSeries);
             }
-
-            // Try to sync with AWS again after a delay
-            setTimeout(() => {
-              syncLocalTradesWithAWS();
-            }, 5000);
-          } catch (error) {
-            console.error("Error parsing stored trades:", error);
-            setTrades([]);
+          } catch (parseError) {
+            console.error("Error parsing stored trades:", parseError);
           }
-        } else {
-          setTrades([]);
         }
       }
     } finally {
       setLoading(false);
+      setLastSyncTime(new Date());
     }
   };
 
-  // Add a new trade
-  const addTrade = async (tradeData: Partial<Trade>) => {
-    try {
-      console.log("Adding new trade to AWS database:", tradeData);
-      // Ensure status is one of the allowed values
-      let status: "OPEN" | "CLOSED" | "EXPIRED" = "OPEN";
-      if (
-        tradeData.status &&
-        ["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
-      ) {
-        status = tradeData.status as "OPEN" | "CLOSED" | "EXPIRED";
+  // Set up periodic background sync
+  useEffect(() => {
+    // Don't run if no user is logged in
+    if (!user?.email) return;
+
+    console.log("Setting up periodic background sync...");
+
+    // Initial sync after a short delay
+    const initialSyncTimeout = setTimeout(() => {
+      syncLocalTradesWithAWS();
+    }, 5000);
+
+    // Set up interval for periodic sync (every 2 minutes)
+    const syncInterval = setInterval(() => {
+      console.log("Running periodic background sync...");
+      if (!syncInProgressRef.current && user?.email) {
+        loadTrades();
+
+        // After loading trades, sync any local changes to AWS
+        setTimeout(() => {
+          syncLocalTradesWithAWS();
+        }, 1000);
       }
+    }, 120000); // 2 minutes
 
-      // Create a properly typed new trade object
-      const newTrade: Omit<Trade, "id"> = {
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate:
-          tradeData.tradeDate || new Date().toISOString().split("T")[0],
-        entryDate: new Date().toISOString(),
-        level: tradeData.level || "Level 2",
-        contractQuantity: tradeData.contractQuantity || 1,
-        entryPremium: tradeData.entryPremium || 0,
-        exitPremium: tradeData.exitPremium,
-        tradeType: tradeData.tradeType || "IRON_CONDOR",
-        strikes: tradeData.strikes || {
-          sellPut: 0,
-          buyPut: 0,
-          sellCall: 0,
-          buyCall: 0,
-        },
-        status: status,
-        pnl: tradeData.pnl,
-        fees: tradeData.fees || 6.56,
-        notes: tradeData.notes,
-        isAutoPopulated: false,
-        matrix: tradeData.matrix || "standard",
-        buyingPower: tradeData.buyingPower || "$26,350",
-        spxClosePrice: tradeData.spxClosePrice,
-        isMaxProfit: tradeData.isMaxProfit,
-      };
+    // Clean up on unmount
+    return () => {
+      clearTimeout(initialSyncTimeout);
+      clearInterval(syncInterval);
+    };
+  }, [user]);
 
-      // Close the modal immediately for better UX
-      setShowAddTrade(false);
+  // Fetch trades on component mount
+  useEffect(() => {
+    if (user?.email) {
+      console.log("User logged in or changed, loading trades and syncing...");
+      loadTrades();
+    }
+  }, [user]);
 
-      // Show loading indicator
+  // Save trades to local storage whenever they change
+  useEffect(() => {
+    if (user?.email && trades.length > 0) {
+      console.log("Saving trades to local storage:", trades.length);
+      localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
+    }
+  }, [trades, user?.email]);
+
+  // Add a new trade with proper AWS sync and local storage update
+  const addTrade = async (newTrade: Trade) => {
+    if (!user?.email) {
+      console.error("Cannot add trade: No user email");
+      return;
+    }
+
+    try {
       setLoading(true);
 
-      // Generate a local ID for the trade in case API fails
-      // Use a 'local_' prefix to easily identify locally created trades
-      const localId =
-        "local_" +
-        Date.now().toString(36) +
-        Math.random().toString(36).substring(2);
-      const localTrade: Trade = {
-        ...(newTrade as any),
+      // Generate a local ID for immediate UI update
+      const localId = `local_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 9)}`;
+      const tradeWithLocalId: Trade = {
+        ...newTrade,
         id: localId,
+        userEmail: user.email,
+        userId: user.id || user.uid || "",
       };
 
-      // First add to local storage immediately to ensure we don't lose the trade
-      if (user?.email) {
-        const updatedLocalTrades = [...trades, localTrade];
+      // Update local state immediately for responsive UI
+      const updatedTrades = [...trades, tradeWithLocalId];
+      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
+      setTrades(updatedTradesWithSeries);
+
+      // Update local storage
+      if (user.email) {
         localStorage.setItem(
           `trades_${user.email}`,
-          JSON.stringify(updatedLocalTrades)
+          JSON.stringify(updatedTradesWithSeries)
         );
-        console.log("Saved trade to local storage as immediate backup");
-
-        // Update UI immediately for better UX
-        setTrades(updatedLocalTrades);
       }
 
-      // Then try to send to AWS API
-      console.log("Sending trade to AWS database...");
-      const createdTrade = await createTrade(newTrade);
+      // Notify parent if callback exists
+      if (onTradeUpdate) {
+        onTradeUpdate(updatedTradesWithSeries);
+      }
 
-      if (createdTrade) {
-        console.log(
-          "Successfully created trade in AWS database:",
-          createdTrade
-        );
+      // Try to sync to AWS with retry logic
+      let awsSuccess = false;
+      let currentRetry = 0;
+      const maxRetries = 3;
+      let awsTrade: Trade | null = null;
 
-        // Replace the local trade with the server-generated one
-        const updatedTrades = trades.map((t: Trade) =>
-          t.id === localTrade.id ? createdTrade : t
-        );
+      while (currentRetry < maxRetries && !awsSuccess) {
+        try {
+          console.log(
+            `Creating trade in AWS (attempt ${
+              currentRetry + 1
+            }/${maxRetries})...`
+          );
 
-        // If the local trade wasn't found (unlikely), add the server one
-        if (!updatedTrades.some((t: Trade) => t.id === createdTrade.id)) {
-          updatedTrades.push(createdTrade);
+          awsTrade = await createTrade({
+            ...newTrade,
+            userEmail: user.email,
+            userId: user.id || user.uid || "",
+          });
+
+          if (awsTrade) {
+            console.log("Successfully created trade in AWS:", awsTrade.id);
+            awsSuccess = true;
+          }
+        } catch (error) {
+          console.error(
+            `Error creating trade in AWS (attempt ${
+              currentRetry + 1
+            }/${maxRetries}):`,
+            error
+          );
+          // Exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
+          );
         }
 
-        setTrades(updatedTrades);
+        currentRetry++;
+      }
 
-        // Update local storage with the server-generated trade
-        if (user?.email) {
+      // If AWS sync was successful, update the local trade with the AWS version
+      if (awsSuccess && awsTrade) {
+        const finalUpdatedTrades = updatedTrades.map((trade) =>
+          trade.id === localId ? awsTrade! : trade
+        );
+
+        const finalTradesWithSeries = assignSeriesToTrades(finalUpdatedTrades);
+        setTrades(finalTradesWithSeries);
+
+        // Update local storage
+        if (user.email) {
           localStorage.setItem(
             `trades_${user.email}`,
-            JSON.stringify(updatedTrades)
+            JSON.stringify(finalTradesWithSeries)
           );
-          console.log("Updated local storage with AWS data");
         }
 
-        // Reload trades from server to ensure we have the latest data
-        // This is done asynchronously to not block the UI
-        setTimeout(() => {
-          loadTrades();
-        }, 1000);
-      } else {
-        // API call failed, but we already saved to local storage
-        console.warn(
-          "AWS database did not return a created trade, using local fallback"
-        );
-        // We already added the trade to local storage and UI above
-
-        // Set up a retry mechanism to sync with AWS later
-        const retrySync = async () => {
-          try {
-            console.log("Retrying to sync local trade with AWS:", localTrade);
-            const retryCreatedTrade = await createTrade(newTrade);
-            if (retryCreatedTrade) {
-              console.log("Successfully synced local trade to AWS on retry");
-              // Update the trades list with the server version
-              const updatedTrades = trades.map((t: Trade) =>
-                t.id === localTrade.id ? retryCreatedTrade : t
-              );
-              setTrades(updatedTrades);
-
-              // Update local storage
-              if (user?.email) {
-                localStorage.setItem(
-                  `trades_${user.email}`,
-                  JSON.stringify(updatedTrades)
-                );
-              }
-            }
-          } catch (retryError) {
-            console.error("Retry sync failed:", retryError);
-          }
-        };
-
-        // Try to sync again after a delay
-        setTimeout(retrySync, 5000);
+        // Notify parent if callback exists
+        if (onTradeUpdate) {
+          onTradeUpdate(finalTradesWithSeries);
+        }
       }
     } catch (error) {
       console.error("Error adding trade:", error);
-      alert(
-        "Failed to add trade to AWS database. The trade may be saved locally but will not sync across devices."
-      );
-
-      // Generate a local ID for the trade as fallback
-      const localId =
-        Date.now().toString(36) + Math.random().toString(36).substring(2);
-      const localTrade: Trade = {
-        ...({
-          userId: user?.id || "",
-          userEmail: user?.email || "",
-          tradeDate:
-            tradeData.tradeDate || new Date().toISOString().split("T")[0],
-          entryDate: new Date().toISOString(),
-          level: tradeData.level || "Level 2",
-          contractQuantity: tradeData.contractQuantity || 1,
-          entryPremium: tradeData.entryPremium || 0,
-          exitPremium: tradeData.exitPremium,
-          tradeType: tradeData.tradeType || "IRON_CONDOR",
-          strikes: tradeData.strikes || {
-            sellPut: 0,
-            buyPut: 0,
-            sellCall: 0,
-            buyCall: 0,
-          },
-          status: "OPEN",
-          pnl: tradeData.pnl,
-          fees: tradeData.fees || 6.56,
-          notes: tradeData.notes,
-          isAutoPopulated: false,
-          matrix: tradeData.matrix || "standard",
-          buyingPower: tradeData.buyingPower || "$26,350",
-        } as any),
-        id: localId,
-      };
-
-      // Update UI with local version
-      const updatedTrades = [...trades, localTrade];
-      setTrades(updatedTrades);
-
-      // Save to local storage for persistence
-      if (user?.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTrades)
-        );
-        console.log("Saved trade to local storage after AWS error");
-      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Update an existing trade
-  const updateExistingTrade = async (tradeData: Partial<Trade>) => {
-    if (!user?.email || !tradeData.id) return;
-
-    setLoading(true);
+  // Update an existing trade with proper AWS sync
+  const updateTradeHandler = async (updatedTrade: Trade) => {
+    if (!user?.email) {
+      console.error("Cannot update trade: No user email");
+      return;
+    }
 
     try {
-      // Find the trade to update
-      const tradeToUpdate = trades.find((t: Trade) => t.id === tradeData.id);
-      if (!tradeToUpdate) {
-        console.error("Trade not found for update");
-        return;
-      }
+      setLoading(true);
 
-      // Ensure all required properties are present before updating
-      if (
-        typeof tradeData.status === "string" &&
-        !["OPEN", "CLOSED", "EXPIRED"].includes(tradeData.status as string)
-      ) {
-        // Fix any invalid status values
-        tradeData.status = "OPEN" as "OPEN" | "CLOSED" | "EXPIRED";
-      }
-
-      // For iron condors with SPX close price, calculate P&L and set exit premium
-      if (
-        tradeData.tradeType === "IRON_CONDOR" &&
-        tradeData.spxClosePrice &&
-        tradeData.status === "CLOSED"
-      ) {
-        const fullTrade = trades.find(
-          (t: Trade) => t.id === tradeData.id
-        ) as Trade;
-        if (fullTrade) {
-          // Check if SPX closed between sell sides (max profit)
-          const isMaxProfitTrade =
-            tradeData.spxClosePrice > fullTrade.strikes.sellPut &&
-            tradeData.spxClosePrice < fullTrade.strikes.sellCall;
-
-          // Set isMaxProfit flag
-          tradeData.isMaxProfit = isMaxProfitTrade;
-
-          // Calculate P&L based on whether it's max profit or not
-          if (isMaxProfitTrade) {
-            // Max profit: full premium received minus fees
-            tradeData.exitPremium = 0.0;
-            tradeData.pnl =
-              fullTrade.entryPremium * fullTrade.contractQuantity * 100 -
-              fullTrade.fees;
-          } else {
-            // Max loss: For a 5-wide spread, if you collect 2.00 premium, you lose 3.00 (5.00 - 2.00)
-            // The total loss is (premium - 5.00) * contracts * 100 - fees
-            tradeData.exitPremium = 5.0;
-            tradeData.pnl =
-              (fullTrade.entryPremium - 5.0) *
-                fullTrade.contractQuantity *
-                100 -
-              fullTrade.fees;
-          }
-        }
-      }
+      // Create a modified version with a special ID to track local changes
+      const modifiedId = `${updatedTrade.id}_modified`;
+      const tradeWithModifiedId: Trade = {
+        ...updatedTrade,
+        id: modifiedId,
+      };
 
       // Update local state immediately
-      const updatedTrades = trades.map((t: Trade) =>
-        t.id === tradeData.id ? ({ ...t, ...tradeData } as Trade) : t
+      const updatedTrades = trades.map((trade) =>
+        trade.id === updatedTrade.id ? tradeWithModifiedId : trade
       );
-      setTrades(updatedTrades);
-      setEditingTrade(null);
 
-      // Save to local storage immediately
-      if (user?.id) {
+      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
+      setTrades(updatedTradesWithSeries);
+
+      // Update local storage
+      if (user.email) {
         localStorage.setItem(
-          `trades_${user.id}`,
-          JSON.stringify(updatedTrades)
+          `trades_${user.email}`,
+          JSON.stringify(updatedTradesWithSeries)
         );
       }
 
-      // Try to update on the server
-      try {
-        // Cast to Trade type for the API call
-        const updatedTrade = await updateTrade(tradeData as Trade);
-        if (updatedTrade) {
-          // Update with server response
-          const serverUpdatedTrades = trades.map((t: Trade) =>
-            t.id === updatedTrade.id ? updatedTrade : t
+      // Notify parent if callback exists
+      if (onTradeUpdate) {
+        onTradeUpdate(updatedTradesWithSeries);
+      }
+
+      // Try to sync to AWS with retry logic
+      let awsSuccess = false;
+      let currentRetry = 0;
+      const maxRetries = 3;
+      let awsTrade: Trade | null = null;
+
+      while (currentRetry < maxRetries && !awsSuccess) {
+        try {
+          console.log(
+            `Updating trade in AWS (attempt ${
+              currentRetry + 1
+            }/${maxRetries})...`
           );
-          setTrades(serverUpdatedTrades);
 
-          // Update local storage with server data
-          if (user?.id) {
-            localStorage.setItem(
-              `trades_${user.id}`,
-              JSON.stringify(serverUpdatedTrades)
-            );
-          }
+          awsTrade = await updateTrade({
+            ...updatedTrade,
+            userEmail: user.email,
+            userId: user.id || user.uid || "",
+          });
 
-          // Notify parent component if needed
-          if (onTradeUpdate) {
-            onTradeUpdate(serverUpdatedTrades);
+          if (awsTrade) {
+            console.log("Successfully updated trade in AWS:", awsTrade.id);
+            awsSuccess = true;
           }
+        } catch (error) {
+          console.error(
+            `Error updating trade in AWS (attempt ${
+              currentRetry + 1
+            }/${maxRetries}):`,
+            error
+          );
+          // Exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
+          );
         }
-      } catch (apiError) {
-        console.error("API error when updating trade:", apiError);
-        // Trade is already updated locally, so we don't need to alert the user
-        console.log("Trade was updated locally but not on the server");
+
+        currentRetry++;
+      }
+
+      // If AWS sync was successful, update the local trade with the AWS version
+      if (awsSuccess && awsTrade) {
+        const finalUpdatedTrades = updatedTrades.map((trade) =>
+          trade.id === modifiedId ? awsTrade! : trade
+        );
+
+        const finalTradesWithSeries = assignSeriesToTrades(finalUpdatedTrades);
+        setTrades(finalTradesWithSeries);
+
+        // Update local storage
+        if (user.email) {
+          localStorage.setItem(
+            `trades_${user.email}`,
+            JSON.stringify(finalTradesWithSeries)
+          );
+        }
+
+        // Notify parent if callback exists
+        if (onTradeUpdate) {
+          onTradeUpdate(finalTradesWithSeries);
+        }
       }
     } catch (error) {
       console.error("Error updating trade:", error);
-      alert("Failed to update trade. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Delete a trade
-  const removeTrade = async (tradeId: string) => {
+  // Delete a trade with proper AWS sync
+  const deleteTradeHandler = async (tradeId: string) => {
+    if (!user?.email) {
+      console.error("Cannot delete trade: No user email");
+      return;
+    }
+
     try {
-      console.log("Deleting trade:", tradeId);
+      setLoading(true);
+
+      // Find the trade to delete
+      const tradeToDelete = trades.find((trade) => trade.id === tradeId);
+      if (!tradeToDelete) {
+        console.error("Trade not found for deletion:", tradeId);
+        setLoading(false);
+        return;
+      }
 
       // Remove from local state immediately
-      const updatedTrades = trades.filter((t) => t.id !== tradeId);
-      setTrades(updatedTrades);
+      const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
+      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
+      setTrades(updatedTradesWithSeries);
 
-      // Update local storage immediately
-      if (user?.email) {
+      // Update local storage
+      if (user.email) {
         localStorage.setItem(
           `trades_${user.email}`,
-          JSON.stringify(updatedTrades)
+          JSON.stringify(updatedTradesWithSeries)
         );
       }
 
-      // Try to delete on the server
-      try {
-        const success = await deleteTrade(tradeId);
-        if (!success) {
-          console.warn("API returned unsuccessful status when deleting trade");
+      // Notify parent if callback exists
+      if (onTradeUpdate) {
+        onTradeUpdate(updatedTradesWithSeries);
+      }
+
+      // Only try to delete from AWS if it's not a local-only trade
+      if (!tradeId.startsWith("local_")) {
+        // Try to sync deletion to AWS with retry logic
+        let awsSuccess = false;
+        let currentRetry = 0;
+        const maxRetries = 3;
+
+        while (currentRetry < maxRetries && !awsSuccess) {
+          try {
+            console.log(
+              `Deleting trade from AWS (attempt ${
+                currentRetry + 1
+              }/${maxRetries})...`
+            );
+
+            await deleteTrade(tradeId);
+            console.log("Successfully deleted trade from AWS:", tradeId);
+            awsSuccess = true;
+          } catch (error) {
+            console.error(
+              `Error deleting trade from AWS (attempt ${
+                currentRetry + 1
+              }/${maxRetries}):`,
+              error
+            );
+            // Exponential backoff
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
+            );
+          }
+
+          currentRetry++;
         }
-      } catch (apiError) {
-        console.error("API error when deleting trade:", apiError);
-        // Trade is already deleted locally, so we don't need to alert the user
-        console.log("Trade was deleted locally but not on the server");
+
+        if (!awsSuccess) {
+          console.error(
+            `Failed to delete trade ${tradeId} from AWS after ${maxRetries} attempts`
+          );
+        }
       }
     } catch (error) {
       console.error("Error deleting trade:", error);
-      alert("Failed to delete trade. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Check if SPX closed between sell sides (max profit scenario)
-  const isMaxProfit = (trade: Trade): boolean => {
-    if (!trade.spxClosePrice || trade.tradeType !== "IRON_CONDOR") {
-      return false;
+  // Close a trade by updating its status and exit details
+  const closeTradeHandler = async (
+    tradeId: string,
+    exitPrice: number,
+    exitDate: string,
+    spxClosePrice?: number
+  ) => {
+    if (!user?.email) {
+      console.error("Cannot close trade: No user email");
+      return;
     }
 
-    // Check if SPX closed between the two sell sides
-    return (
-      trade.spxClosePrice > trade.strikes.sellPut &&
-      trade.spxClosePrice < trade.strikes.sellCall
-    );
-  };
-
-  // Calculate P&L for a trade
-  const calculatePnL = (trade: Trade): number => {
-    if (trade.status === "OPEN") {
-      return 0;
-    }
-
-    // For iron condors with SPX close price
-    if (trade.tradeType === "IRON_CONDOR" && trade.spxClosePrice) {
-      if (isMaxProfit(trade)) {
-        // Max profit: full premium received minus fees
-        const maxProfit =
-          trade.entryPremium * trade.contractQuantity * 100 - trade.fees;
-        return maxProfit;
-      } else {
-        // Max loss: For a 5-wide spread, if you collect 2.00 premium, you lose 3.00 (5.00 - 2.00)
-        // The total loss is (premium - 5.00) * contracts * 100 - fees
-        const maxLoss =
-          (trade.entryPremium - 5.0) * trade.contractQuantity * 100 -
-          trade.fees;
-        return maxLoss; // This will be negative
-      }
-    }
-
-    // For other trades or trades without SPX close price, calculate based on entry and exit premiums
-    if (trade.exitPremium !== undefined) {
-      const grossPnL =
-        (trade.entryPremium - trade.exitPremium) * trade.contractQuantity * 100;
-      return grossPnL - trade.fees;
-    }
-
-    return 0;
-  };
-
-  // Group trades by series
-  const groupTradesBySeries = (
-    tradesToGroup: Trade[]
-  ): { [key: string]: Trade[] } => {
-    const grouped: { [key: string]: Trade[] } = {};
-
-    tradesToGroup.forEach((trade) => {
-      if (!trade.seriesId) return;
-
-      if (!grouped[trade.seriesId]) {
-        grouped[trade.seriesId] = [];
+    try {
+      // Find the trade to close
+      const tradeToClose = trades.find((trade) => trade.id === tradeId);
+      if (!tradeToClose) {
+        console.error("Trade not found for closing:", tradeId);
+        return;
       }
 
-      grouped[trade.seriesId].push(trade);
-    });
+      // Calculate P&L
+      const entryPremium = tradeToClose.entryPremium;
+      const contractQuantity = tradeToClose.contractQuantity;
+      const fees = tradeToClose.fees || 0;
 
-    return grouped;
-  };
+      let pnl = (exitPrice - entryPremium) * 100 * contractQuantity - fees;
 
-  // Calculate total P&L for a series
-  const calculateSeriesPnL = (seriesTrades: Trade[]): number => {
-    return seriesTrades.reduce(
-      (sum: number, trade: Trade) => sum + (trade.pnl || 0),
-      0
-    );
-  };
-
-  // Filter and sort trades
-  const filteredAndSortedTrades = trades
-    .filter((trade: Trade) => {
-      if (filterStatus === "ALL") return true;
-      return trade.status === filterStatus;
-    })
-    .sort((a: Trade, b: Trade) => {
-      let comparison = 0;
-
-      switch (sortBy) {
-        case "date":
-          comparison =
-            new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
-          break;
-        case "level":
-          comparison = a.level.localeCompare(b.level);
-          break;
-        case "pnl":
-          comparison = (b.pnl || 0) - (a.pnl || 0);
-          break;
-        default:
-          comparison =
-            new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime();
+      // Check if this is a max profit scenario
+      let isMaxProfit = false;
+      if (tradeToClose.tradeType === "IRON_CONDOR") {
+        // For iron condor, max profit is achieved when both spreads expire worthless
+        isMaxProfit = exitPrice <= 0.05; // Assuming near-zero premium indicates max profit
+      } else if (tradeToClose.tradeType === "PUT_SPREAD") {
+        // For put spread, max profit is when spread expires worthless (above strikes)
+        isMaxProfit = exitPrice <= 0.05;
+      } else if (tradeToClose.tradeType === "CALL_SPREAD") {
+        // For call spread, max profit is when spread expires worthless (below strikes)
+        isMaxProfit = exitPrice <= 0.05;
       }
 
-      return sortOrder === "asc" ? -comparison : comparison;
-    });
+      // Create updated trade object
+      const updatedTrade: Trade = {
+        ...tradeToClose,
+        status: "CLOSED",
+        exitDate,
+        exitPremium: exitPrice,
+        pnl,
+        isMaxProfit,
+        spxClosePrice,
+      };
+
+      // Use the update handler to sync with AWS
+      await updateTradeHandler(updatedTrade);
+    } catch (error) {
+      console.error("Error closing trade:", error);
+    }
+  };
+
+  // Handle adding a new trade
+  const handleAddTrade = () => {
+    setShowAddTrade(true);
+  };
+
+  // Handle editing a trade
+  const handleEditTrade = (trade: Trade) => {
+    setTradeToEdit(trade);
+  };
+
+  // Handle closing a trade
+  const handleCloseTrade = (trade: Trade) => {
+    setTradeToClose(trade);
+    setShowSpxDialog(true);
+  };
+
+  // Handle submitting SPX close price when closing a trade
+  const handleSpxSubmit = () => {
+    if (tradeToClose) {
+      const spxPrice = spxClosePrice ? parseFloat(spxClosePrice) : undefined;
+      closeTradeHandler(
+        tradeToClose.id,
+        tradeToClose.entryPremium,
+        new Date().toISOString(),
+        spxPrice
+      );
+      setShowSpxDialog(false);
+      setTradeToClose(null);
+      setSpxClosePrice("");
+    }
+  };
+
+  // Filter trades based on status
+  const filteredTrades = trades.filter((trade) => {
+    if (filterStatus === "ALL") return true;
+    return trade.status === filterStatus;
+  });
 
   // Group trades by series if enabled
-  const groupedTrades = groupBySeries
-    ? groupTradesBySeries(filteredAndSortedTrades)
-    : {};
+  const displayTrades = groupBySeries
+    ? filteredTrades.reduce((acc: { [key: string]: Trade[] }, trade) => {
+        const key = trade.seriesId || trade.id;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(trade);
+        return acc;
+      }, {})
+    : { individual: filteredTrades };
 
-  // Calculate summary statistics
-  const calculateStats = () => {
-    const openTrades = trades.filter((t: Trade) => t.status === "OPEN").length;
-    const closedTrades = trades.filter(
-      (t: Trade) => t.status === "CLOSED"
-    ).length;
-    const totalPnL = trades.reduce(
-      (sum: number, trade: Trade) => sum + (trade.pnl || 0),
-      0
-    );
-    const winningTrades = trades.filter((t: Trade) => (t.pnl || 0) > 0).length;
-    const losingTrades = trades.filter((t: Trade) => (t.pnl || 0) < 0).length;
-    const winRate =
-      closedTrades > 0
-        ? ((winningTrades / closedTrades) * 100).toFixed(1)
-        : "0";
-
-    return {
-      openTrades,
-      closedTrades,
-      totalPnL,
-      winningTrades,
-      losingTrades,
-      winRate,
-    };
-  };
-
-  const stats = calculateStats();
-
-  // Render loading state
-  if (loading) {
-    return (
-      <div className="trade-ledger-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading your trades...</p>
-      </div>
-    );
-  }
-
+  // Render the component
   return (
-    <div className="trade-ledger-container">
-      {/* Header Section */}
+    <div className="trade-ledger">
       <div className="trade-ledger-header">
         <h2>Trade Ledger</h2>
-        <button
-          className="add-trade-button"
-          onClick={() => setShowAddTrade(true)}
-        >
-          + Add Trade
-        </button>
-      </div>
-
-      {/* Stats Summary */}
-      <div className="trade-stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Total P&L</div>
-          <div
-            className={`stat-value ${stats.totalPnL >= 0 ? "profit" : "loss"}`}
-          >
-            ${stats.totalPnL.toFixed(2)}
+        <div className="trade-actions">
+          <button onClick={handleAddTrade} className="add-trade-btn">
+            Add Trade
+          </button>
+          <div className="filter-controls">
+            <label>
+              Filter by Status:
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="ALL">All Trades</option>
+                <option value="OPEN">Open Trades</option>
+                <option value="CLOSED">Closed Trades</option>
+                <option value="EXPIRED">Expired Trades</option>
+              </select>
+            </label>
+            <label className="group-checkbox">
+              Group by Series:
+              <input
+                type="checkbox"
+                checked={groupBySeries}
+                onChange={() => setGroupBySeries(!groupBySeries)}
+              />
+            </label>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Win Rate</div>
-          <div className="stat-value">{stats.winRate}%</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Total Trades</div>
-          <div className="stat-value">{trades.length}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Winning Trades</div>
-          <div className="stat-value">{stats.winningTrades}</div>
-        </div>
-      </div>
-
-      {/* Filters and Sorting */}
-      <div className="trade-ledger-controls">
-        <div className="filter-group">
-          <label>Filter:</label>
-          <select
-            value={filterStatus}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setFilterStatus(e.target.value as "ALL" | "OPEN" | "CLOSED")
-            }
-            className="filter-select"
-          >
-            <option value="ALL">All Trades</option>
-            <option value="OPEN">Open</option>
-            <option value="CLOSED">Closed</option>
-          </select>
-        </div>
-
-        <div className="sort-group">
-          <label>Sort by:</label>
-          <select
-            value={sortBy}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setSortBy(e.target.value as "date" | "level" | "pnl")
-            }
-            className="sort-select"
-          >
-            <option value="date">Date</option>
-            <option value="level">Level</option>
-            <option value="pnl">P&L</option>
-          </select>
-          <button
-            className="sort-order-button"
-            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-          >
-            {sortOrder === "asc" ? "↑" : "↓"}
-          </button>
-        </div>
-
-        <div className="group-toggle">
-          <label>
-            <input
-              type="checkbox"
-              checked={groupBySeries}
-              onChange={() => setGroupBySeries(!groupBySeries)}
-            />
-            Group by Series
-          </label>
-        </div>
-      </div>
-
-      {/* Trades Table */}
-      <div className="trades-table-container">
-        <table className="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Level</th>
-              <th>Type</th>
-              <th>Contracts</th>
-              <th>Sell Put</th>
-              <th>Sell Call</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>SPX Close</th>
-              <th>Status</th>
-              <th>P&L</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupBySeries
-              ? // Display trades grouped by series
-                Object.entries(groupedTrades).map(
-                  ([seriesId, seriesTrades]) => {
-                    const seriesPnL = calculateSeriesPnL(seriesTrades);
-
-                    return (
-                      <React.Fragment key={seriesId}>
-                        {/* Series header row */}
-                        <tr className="series-header">
-                          <td colSpan={10} className="series-title">
-                            {seriesTrades.length} Trade Series
-                          </td>
-                          <td
-                            className={seriesPnL >= 0 ? "profit" : "loss"}
-                            style={{ fontWeight: "bold" }}
-                          >
-                            {seriesPnL.toFixed(2)}
-                          </td>
-                          <td></td>
-                        </tr>
-
-                        {/* Series trades */}
-                        {seriesTrades.map((trade: Trade) => (
-                          <tr
-                            key={trade.id}
-                            className={`series-trade ${
-                              trade.status === "OPEN" ? "open-trade" : ""
-                            }`}
-                          >
-                            <td>
-                              {new Date(trade.tradeDate).toLocaleDateString()}
-                            </td>
-                            <td>
-                              <span
-                                className={`level-badge level-${trade.level
-                                  .toLowerCase()
-                                  .replace(" ", "-")}`}
-                              >
-                                {trade.level}
-                              </span>
-                            </td>
-                            <td>{trade.tradeType.replace("_", " ")}</td>
-                            <td>{trade.contractQuantity}</td>
-                            <td>{trade.strikes?.sellPut || "-"}</td>
-                            <td>{trade.strikes?.sellCall || "-"}</td>
-                            <td>{trade.entryPremium.toFixed(2)}</td>
-                            <td>
-                              {trade.exitPremium !== undefined ||
-                              (trade.isMaxProfit && trade.status === "CLOSED")
-                                ? trade.exitPremium !== undefined
-                                  ? trade.exitPremium.toFixed(2)
-                                  : "0.00"
-                                : "-"}
-                            </td>
-                            <td>
-                              {trade.spxClosePrice ? (
-                                <span
-                                  className={`spx-close ${
-                                    trade.isMaxProfit ? "spx-win" : "spx-loss"
-                                  }`}
-                                >
-                                  {trade.spxClosePrice}
-                                  {trade.tradeType === "IRON_CONDOR" && (
-                                    <span className="spx-indicator">
-                                      {trade.isMaxProfit ? "✓" : "✗"}
-                                    </span>
-                                  )}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
-                            </td>
-                            <td>
-                              <span
-                                className={`status-badge status-${trade.status.toLowerCase()}`}
-                              >
-                                {trade.status}
-                              </span>
-                            </td>
-                            <td
-                              className={
-                                trade.pnl && trade.pnl >= 0 ? "profit" : "loss"
-                              }
-                            >
-                              {trade.pnl !== undefined
-                                ? trade.pnl.toFixed(2)
-                                : "-"}
-                            </td>
-                            <td>
-                              <button
-                                className="action-button edit"
-                                onClick={() => setEditingTrade(trade)}
-                              >
-                                Edit
-                              </button>
-                              {trade.status === "OPEN" && (
-                                <button
-                                  className="action-button close"
-                                  onClick={() => {
-                                    // For iron condors, show SPX close price dialog
-                                    if (trade.tradeType === "IRON_CONDOR") {
-                                      setTradeToClose(trade);
-                                      setSpxClosePrice("");
-                                      setShowSpxDialog(true);
-                                    } else {
-                                      // For other trade types, just close directly
-                                      const tradeToClose: Trade = {
-                                        ...trade,
-                                        status: "CLOSED",
-                                        exitDate: new Date().toISOString(),
-                                        exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
-                                      };
-                                      updateExistingTrade(tradeToClose);
-                                    }
-                                  }}
-                                >
-                                  Close
-                                </button>
-                              )}
-                              <button
-                                className="action-button delete"
-                                onClick={() => removeTrade(trade.id)}
-                              >
-                                Delete
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  }
-                )
-              : // Display trades without grouping
-                filteredAndSortedTrades.map((trade: Trade) => (
-                  <tr
-                    key={trade.id}
-                    className={trade.status === "OPEN" ? "open-trade" : ""}
-                  >
-                    <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
-                    <td>
-                      <span
-                        className={`level-badge level-${trade.level
-                          .toLowerCase()
-                          .replace(" ", "-")}`}
-                      >
-                        {trade.level}
-                      </span>
-                    </td>
-                    <td>{trade.tradeType.replace("_", " ")}</td>
-                    <td>{trade.contractQuantity}</td>
-                    <td>{trade.strikes?.sellPut || "-"}</td>
-                    <td>{trade.strikes?.sellCall || "-"}</td>
-                    <td>{trade.entryPremium.toFixed(2)}</td>
-                    <td>
-                      {trade.exitPremium !== undefined ||
-                      (trade.isMaxProfit && trade.status === "CLOSED")
-                        ? trade.exitPremium !== undefined
-                          ? trade.exitPremium.toFixed(2)
-                          : "0.00"
-                        : "-"}
-                    </td>
-                    <td>
-                      {trade.spxClosePrice ? (
-                        <span
-                          className={`spx-close ${
-                            trade.isMaxProfit ? "spx-win" : "spx-loss"
-                          }`}
-                        >
-                          {trade.spxClosePrice}
-                          {trade.tradeType === "IRON_CONDOR" && (
-                            <span className="spx-indicator">
-                              {trade.isMaxProfit ? "✓" : "✗"}
-                            </span>
-                          )}
-                        </span>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge status-${trade.status.toLowerCase()}`}
-                      >
-                        {trade.status}
-                      </span>
-                    </td>
-                    <td
-                      className={
-                        trade.pnl && trade.pnl >= 0 ? "profit" : "loss"
-                      }
-                    >
-                      {trade.pnl !== undefined ? trade.pnl.toFixed(2) : "-"}
-                    </td>
-                    <td>
-                      <button
-                        className="action-button edit"
-                        onClick={() => setEditingTrade(trade)}
-                      >
-                        Edit
-                      </button>
-                      {trade.status === "OPEN" && (
-                        <button
-                          className="action-button close"
-                          onClick={() => {
-                            // For iron condors, show SPX close price dialog
-                            if (trade.tradeType === "IRON_CONDOR") {
-                              setTradeToClose(trade);
-                              setSpxClosePrice("");
-                              setShowSpxDialog(true);
-                            } else {
-                              // For other trade types, just close directly
-                              const tradeToClose: Trade = {
-                                ...trade,
-                                status: "CLOSED",
-                                exitDate: new Date().toISOString(),
-                                exitPremium: trade.exitPremium || 0, // Ensure exitPremium is set
-                              };
-                              updateExistingTrade(tradeToClose);
-                            }
-                          }}
-                        >
-                          Close
-                        </button>
-                      )}
-                      <button
-                        className="action-button delete"
-                        onClick={() => removeTrade(trade.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-          </tbody>
-        </table>
-
-        {filteredAndSortedTrades.length === 0 && (
-          <div className="no-trades">
-            <p>No trades found. Start by adding your first trade!</p>
+        {lastSyncTime && (
+          <div className="last-sync">
+            Last synced: {lastSyncTime.toLocaleTimeString()}
           </div>
         )}
       </div>
 
-      {/* Trade Form Modal - Simplified Version */}
-      {showAddTrade && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="trade-form-header">
-              <h3>Add New Trade</h3>
-              <button
-                className="close-button"
-                onClick={() => setShowAddTrade(false)}
-              >
-                ×
-              </button>
-            </div>
+      {loading ? (
+        <div className="loading">Loading trades...</div>
+      ) : (
+        <div className="trades-container">
+          {Object.entries(displayTrades).map(([key, groupTrades]) => {
+            // Skip empty groups
+            if (!Array.isArray(groupTrades) || groupTrades.length === 0)
+              return null;
 
+            // For individual display or single-trade series
+            if (key === "individual" || groupTrades.length === 1) {
+              return groupTrades.map((trade) => (
+                <div
+                  key={trade.id}
+                  className={`trade-card ${trade.status.toLowerCase()}`}
+                >
+                  <div className="trade-header">
+                    <h3>
+                      {trade.tradeType.replace("_", " ")} - {trade.level}
+                    </h3>
+                    <div className="trade-status">{trade.status}</div>
+                  </div>
+                  <div className="trade-details">
+                    <div className="trade-dates">
+                      <div>
+                        Trade Date:{" "}
+                        {new Date(trade.tradeDate).toLocaleDateString()}
+                      </div>
+                      <div>
+                        Entry: {new Date(trade.entryDate).toLocaleDateString()}
+                      </div>
+                      {trade.exitDate && (
+                        <div>
+                          Exit: {new Date(trade.exitDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="trade-strikes">
+                      <div>Sell Put: {trade.strikes.sellPut}</div>
+                      <div>Buy Put: {trade.strikes.buyPut}</div>
+                      <div>Sell Call: {trade.strikes.sellCall}</div>
+                      <div>Buy Call: {trade.strikes.buyCall}</div>
+                    </div>
+                    <div className="trade-financials">
+                      <div>Contracts: {trade.contractQuantity}</div>
+                      <div>Entry: ${trade.entryPremium.toFixed(2)}</div>
+                      {trade.exitPremium !== undefined && (
+                        <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
+                      )}
+                      {trade.pnl !== undefined && (
+                        <div
+                          className={`pnl ${
+                            trade.pnl >= 0 ? "profit" : "loss"
+                          }`}
+                        >
+                          P&L: ${trade.pnl.toFixed(2)}
+                          {trade.isMaxProfit && (
+                            <span className="max-profit">MAX</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {trade.spxClosePrice && (
+                      <div className="spx-close">
+                        SPX Close: {trade.spxClosePrice}
+                      </div>
+                    )}
+                    {trade.notes && (
+                      <div className="trade-notes">{trade.notes}</div>
+                    )}
+                  </div>
+                  <div className="trade-actions">
+                    <button onClick={() => handleEditTrade(trade)}>Edit</button>
+                    {trade.status === "OPEN" && (
+                      <button onClick={() => handleCloseTrade(trade)}>
+                        Close
+                      </button>
+                    )}
+                    <button onClick={() => deleteTradeHandler(trade.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ));
+            }
+
+            // For multi-trade series
+            const firstTrade = groupTrades[0];
+            return (
+              <div key={key} className="trade-series">
+                <div className="series-header">
+                  <h3>
+                    {firstTrade.tradeType.replace("_", " ")} Series -{" "}
+                    {firstTrade.level}
+                  </h3>
+                  <div className="series-strikes">
+                    {firstTrade.strikes.sellPut}/{firstTrade.strikes.buyPut} -
+                    {firstTrade.strikes.sellCall}/{firstTrade.strikes.buyCall}
+                  </div>
+                </div>
+                <div className="series-trades">
+                  {groupTrades.map((trade) => (
+                    <div
+                      key={trade.id}
+                      className={`series-trade ${trade.status.toLowerCase()}`}
+                    >
+                      <div className="trade-header">
+                        <div>
+                          Trade Date:{" "}
+                          {new Date(trade.tradeDate).toLocaleDateString()}
+                        </div>
+                        <div className="trade-status">{trade.status}</div>
+                      </div>
+                      <div className="trade-details">
+                        <div className="trade-dates">
+                          <div>
+                            Entry:{" "}
+                            {new Date(trade.entryDate).toLocaleDateString()}
+                          </div>
+                          {trade.exitDate && (
+                            <div>
+                              Exit:{" "}
+                              {new Date(trade.exitDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="trade-financials">
+                          <div>Contracts: {trade.contractQuantity}</div>
+                          <div>Entry: ${trade.entryPremium.toFixed(2)}</div>
+                          {trade.exitPremium !== undefined && (
+                            <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
+                          )}
+                          {trade.pnl !== undefined && (
+                            <div
+                              className={`pnl ${
+                                trade.pnl >= 0 ? "profit" : "loss"
+                              }`}
+                            >
+                              P&L: ${trade.pnl.toFixed(2)}
+                              {trade.isMaxProfit && (
+                                <span className="max-profit">MAX</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="trade-actions">
+                        <button onClick={() => handleEditTrade(trade)}>
+                          Edit
+                        </button>
+                        {trade.status === "OPEN" && (
+                          <button onClick={() => handleCloseTrade(trade)}>
+                            Close
+                          </button>
+                        )}
+                        <button onClick={() => deleteTradeHandler(trade.id)}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Trade Modal */}
+      {showAddTrade && (
+        <div className="modal">
+          <div className="modal-content">
+            <span className="close" onClick={() => setShowAddTrade(false)}>
+              &times;
+            </span>
+            <h2>Add New Trade</h2>
             <TradeForm
-              onSave={(tradeData: Partial<Trade>) => {
-                console.log("Trade form submitted with data:", tradeData);
-                addTrade(tradeData);
+              onSubmit={(trade) => {
+                addTrade(trade);
+                setShowAddTrade(false);
               }}
               onCancel={() => setShowAddTrade(false)}
             />
-
-            {/* Emergency Add Button - Direct handler outside the form */}
-            <div
-              style={{
-                padding: "20px",
-                textAlign: "center",
-                borderTop: "1px solid #eee",
-                marginTop: "20px",
-              }}
-            >
-              <button
-                style={{
-                  padding: "10px 20px",
-                  backgroundColor: "#4CAF50",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "16px",
-                }}
-                onClick={() => {
-                  console.log("Emergency add button clicked");
-                  // Create a minimal trade
-                  const minimalTrade: Partial<Trade> = {
-                    tradeDate: new Date().toISOString().split("T")[0],
-                    level: "Level 2",
-                    contractQuantity: 1,
-                    entryPremium: 1.0,
-                    tradeType: "IRON_CONDOR",
-                    strikes: {
-                      buyPut: 4900,
-                      sellPut: 4950,
-                      sellCall: 5000,
-                      buyCall: 5050,
-                    },
-                    status: "OPEN",
-                    fees: 6.56,
-                    notes: "Added via emergency button",
-                    matrix: "standard",
-                    buyingPower: "$26,350",
-                  };
-                  addTrade(minimalTrade);
-                }}
-              >
-                Emergency Add Trade
-              </button>
-            </div>
           </div>
         </div>
       )}
 
       {/* Edit Trade Modal */}
-      {editingTrade && (
-        <div className="modal-overlay">
+      {tradeToEdit && (
+        <div className="modal">
           <div className="modal-content">
+            <span className="close" onClick={() => setTradeToEdit(null)}>
+              &times;
+            </span>
+            <h2>Edit Trade</h2>
             <TradeForm
-              trade={editingTrade}
-              onSave={updateExistingTrade}
-              onCancel={() => setEditingTrade(null)}
-              isClosing={
-                editingTrade.status === "CLOSED" && !editingTrade.exitDate
-              }
+              trade={tradeToEdit}
+              onSubmit={(trade) => {
+                updateTradeHandler(trade);
+                setTradeToEdit(null);
+              }}
+              onCancel={() => setTradeToEdit(null)}
             />
           </div>
         </div>
@@ -1255,195 +1119,33 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
       {/* SPX Close Price Dialog */}
       {showSpxDialog && tradeToClose && (
-        <div className="modal-overlay">
-          <div
-            className="modal-content"
-            style={{ maxWidth: "500px", padding: "30px" }}
-          >
-            <div className="trade-form-header">
-              <h3>Enter SPX Close Price</h3>
-              <button
-                className="close-button"
-                onClick={() => setShowSpxDialog(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div style={{ padding: "20px" }}>
-              <p style={{ marginBottom: "15px" }}>
-                Enter the SPX close price to determine if this iron condor
-                achieved maximum profit.
-              </p>
-
-              <div style={{ marginBottom: "15px" }}>
-                <p style={{ marginBottom: "10px", fontWeight: "bold" }}>
-                  Trade Details:
-                </p>
-                <p>Sell Put: {tradeToClose.strikes.sellPut}</p>
-                <p>Sell Call: {tradeToClose.strikes.sellCall}</p>
-                <p>Entry Premium: ${tradeToClose.entryPremium.toFixed(2)}</p>
-                <p>Contracts: {tradeToClose.contractQuantity}</p>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    marginBottom: "5px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  SPX Close Price:
-                </label>
+        <div className="modal">
+          <div className="modal-content">
+            <span
+              className="close"
+              onClick={() => {
+                setShowSpxDialog(false);
+                setTradeToClose(null);
+              }}
+            >
+              &times;
+            </span>
+            <h2>Enter SPX Close Price</h2>
+            <div className="spx-form">
+              <label>
+                SPX Close Price (optional):
                 <input
                   type="number"
                   value={spxClosePrice}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setSpxClosePrice(
-                      e.target.value === "" ? "" : parseFloat(e.target.value)
-                    )
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    fontSize: "16px",
-                    borderRadius: "4px",
-                    border: "1px solid #ccc",
-                  }}
+                  onChange={(e) => setSpxClosePrice(e.target.value)}
                   placeholder="Enter SPX close price"
                 />
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <button
-                  onClick={() => setShowSpxDialog(false)}
-                  style={{
-                    padding: "10px 20px",
-                    backgroundColor: "#f3f4f6",
-                    border: "1px solid #ccc",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (spxClosePrice !== "") {
-                      // Check if SPX closed between sell sides
-                      const isMaxProfitAchieved =
-                        spxClosePrice > tradeToClose.strikes.sellPut &&
-                        spxClosePrice < tradeToClose.strikes.sellCall;
-
-                      // Create a copy of the trade with updated status and SPX close price
-                      const updatedTrade: Trade = {
-                        ...tradeToClose,
-                        status: "CLOSED",
-                        exitDate: new Date().toISOString(),
-                        spxClosePrice: spxClosePrice as number,
-                        isMaxProfit: isMaxProfitAchieved,
-                        // If max profit, exit premium is 0 (kept all premium)
-                        // Otherwise, use existing exit premium or default to half the entry premium
-                        exitPremium: isMaxProfitAchieved
-                          ? 0
-                          : tradeToClose.exitPremium ||
-                            tradeToClose.entryPremium / 2,
-                      };
-
-                      // Update the trade
-                      updateExistingTrade(updatedTrade);
-                      setShowSpxDialog(false);
-                    }
-                  }}
-                  disabled={spxClosePrice === ""}
-                  style={{
-                    padding: "10px 20px",
-                    backgroundColor: spxClosePrice === "" ? "#ccc" : "#6366f1",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "4px",
-                    cursor: spxClosePrice === "" ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Close Trade
-                </button>
-              </div>
+              </label>
+              <button onClick={handleSpxSubmit}>Submit</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Mobile View - Cards */}
-      <div className="trades-mobile-view">
-        {filteredAndSortedTrades.map((trade) => (
-          <div key={trade.id} className="trade-card-mobile">
-            <div className="trade-card-header">
-              <span
-                className={`level-badge level-${trade.level
-                  .toLowerCase()
-                  .replace(" ", "-")}`}
-              >
-                {trade.level}
-              </span>
-              <span
-                className={`status-badge status-${trade.status.toLowerCase()}`}
-              >
-                {trade.status}
-              </span>
-            </div>
-
-            <div className="trade-card-details">
-              <div className="detail-row">
-                <span className="detail-label">Date:</span>
-                <span>{new Date(trade.tradeDate).toLocaleDateString()}</span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">Contracts:</span>
-                <span>{trade.contractQuantity}</span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">Entry/Exit:</span>
-                <span>
-                  ${trade.entryPremium.toFixed(2)} /
-                  {trade.exitPremium
-                    ? ` $${trade.exitPremium.toFixed(2)}`
-                    : " -"}
-                </span>
-              </div>
-              <div className="detail-row">
-                <span className="detail-label">P&L:</span>
-                <span
-                  className={trade.pnl && trade.pnl >= 0 ? "profit" : "loss"}
-                >
-                  {trade.pnl ? `$${trade.pnl.toFixed(2)}` : "-"}
-                </span>
-              </div>
-            </div>
-
-            <div className="trade-card-actions">
-              <button onClick={() => setEditingTrade(trade)}>Edit</button>
-              {trade.status === "OPEN" && (
-                <button
-                  onClick={() => {
-                    // Create a properly typed trade object for closing
-                    const tradeToClose: Trade = {
-                      ...trade,
-                      status: "CLOSED",
-                      exitDate: new Date().toISOString(),
-                    };
-                    setEditingTrade(tradeToClose);
-                  }}
-                >
-                  Close Trade
-                </button>
-              )}
-              <button onClick={() => removeTrade(trade.id)}>Delete</button>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
