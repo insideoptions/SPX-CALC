@@ -4,12 +4,7 @@ import TradeForm from "./TradeForm";
 import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
 import "./TradeLedger.css";
 
-// Define interfaces for auth context and user
-interface User {
-  email: string | null;
-  id?: string; // Support for old code using id
-  uid?: string; // Support for new code using uid
-}
+// Using global User interface from types.d.ts
 
 // Trade interface
 export interface Trade {
@@ -178,7 +173,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               awsTrade = await createTrade({
                 ...localTrade,
                 userEmail: user.email,
-                userId: user.id || user.uid || "",
+                userId: user.id || (user as any).uid || "",
               });
             } else if (localTrade.id.includes("_modified")) {
               // This is a modified trade that needs to be updated in AWS
@@ -187,7 +182,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 ...localTrade,
                 id: originalId, // Use the original ID for the update
                 userEmail: user.email,
-                userId: user.id || user.uid || "",
+                userId: user.id || (user as any).uid || "",
               });
             }
 
@@ -468,37 +463,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   }, [trades, user?.email]);
 
   // Add a new trade with proper AWS sync and local storage update
-  const addTrade = async (partialTrade: Partial<Trade>) => {
-    // Create a complete trade object with default values for required fields
-    const newTrade: Trade = {
-      id: "",
-      userId: "",
-      userEmail: "",
-      tradeDate: partialTrade.tradeDate || new Date().toISOString(),
-      entryDate: partialTrade.entryDate || new Date().toISOString(),
-      exitDate: partialTrade.exitDate,
-      level: partialTrade.level || "",
-      contractQuantity: partialTrade.contractQuantity || 1,
-      entryPremium: partialTrade.entryPremium || 0,
-      exitPremium: partialTrade.exitPremium,
-      tradeType: partialTrade.tradeType || "IRON_CONDOR",
-      strikes: partialTrade.strikes || {
-        sellPut: 0,
-        buyPut: 0,
-        sellCall: 0,
-        buyCall: 0,
-      },
-      status: partialTrade.status || "OPEN",
-      pnl: partialTrade.pnl,
-      fees: partialTrade.fees || 0,
-      notes: partialTrade.notes,
-      isAutoPopulated: partialTrade.isAutoPopulated || false,
-      matrix: partialTrade.matrix || "",
-      buyingPower: partialTrade.buyingPower || "",
-      spxClosePrice: partialTrade.spxClosePrice,
-      isMaxProfit: partialTrade.isMaxProfit,
-      seriesId: partialTrade.seriesId,
-    };
+  const addTrade = async (newTrade: Trade) => {
     if (!user?.email) {
       console.error("Cannot add trade: No user email");
       return;
@@ -515,7 +480,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         ...newTrade,
         id: localId,
         userEmail: user.email,
-        userId: user.id || user.uid || "",
+        userId: user.id || (user as any).uid || "",
       };
 
       // Update local state immediately for responsive UI
@@ -553,7 +518,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           awsTrade = await createTrade({
             ...newTrade,
             userEmail: user.email,
-            userId: user.id || user.uid || "",
+            userId: user.id || (user as any).uid || "",
           });
 
           if (awsTrade) {
@@ -606,33 +571,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Update an existing trade with proper AWS sync
-  const updateTradeHandler = async (partialUpdatedTrade: Partial<Trade>) => {
-    if (!partialUpdatedTrade.id) {
-      console.error("Cannot update trade: No trade ID");
-      return;
-    }
-
-    // Find the existing trade to merge with the updates
-    const existingTrade = trades.find(
-      (t: Trade) => t.id === partialUpdatedTrade.id
-    );
-    if (!existingTrade) {
-      console.error(
-        `Cannot update trade: Trade with ID ${partialUpdatedTrade.id} not found`
-      );
-      return;
-    }
-
-    // Merge the existing trade with the updates
-    const updatedTrade: Trade = {
-      ...existingTrade,
-      ...partialUpdatedTrade,
-      // Ensure nested objects are properly merged
-      strikes: {
-        ...existingTrade.strikes,
-        ...partialUpdatedTrade.strikes,
-      },
-    };
+  const updateTradeHandler = async (updatedTrade: Trade) => {
     if (!user?.email) {
       console.error("Cannot update trade: No user email");
       return;
@@ -686,7 +625,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           awsTrade = await updateTrade({
             ...updatedTrade,
             userEmail: user.email,
-            userId: user.id || user.uid || "",
+            userId: user.id || (user as any).uid || "",
           });
 
           if (awsTrade) {
@@ -941,9 +880,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               Filter by Status:
               <select
                 value={filterStatus}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  setFilterStatus(e.target.value)
-                }
+                onChange={(e) => setFilterStatus(e.target.value)}
               >
                 <option value="ALL">All Trades</option>
                 <option value="OPEN">Open Trades</option>
@@ -956,9 +893,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               <input
                 type="checkbox"
                 checked={groupBySeries}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setGroupBySeries(!groupBySeries)
-                }
+                onChange={() => setGroupBySeries(!groupBySeries)}
               />
             </label>
           </div>
@@ -1147,8 +1082,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             </span>
             <h2>Add New Trade</h2>
             <TradeForm
-              onSubmit={(trade) => {
-                addTrade(trade);
+              onSave={(trade: Partial<Trade>) => {
+                addTrade(trade as Trade);
                 setShowAddTrade(false);
               }}
               onCancel={() => setShowAddTrade(false)}
@@ -1167,8 +1102,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             <h2>Edit Trade</h2>
             <TradeForm
               trade={tradeToEdit}
-              onSubmit={(trade) => {
-                updateTradeHandler(trade);
+              onSave={(trade: Partial<Trade>) => {
+                updateTradeHandler(trade as Trade);
                 setTradeToEdit(null);
               }}
               onCancel={() => setTradeToEdit(null)}
@@ -1197,9 +1132,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 <input
                   type="number"
                   value={spxClosePrice}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setSpxClosePrice(e.target.value)
-                  }
+                  onChange={(e) => setSpxClosePrice(e.target.value)}
                   placeholder="Enter SPX close price"
                 />
               </label>
