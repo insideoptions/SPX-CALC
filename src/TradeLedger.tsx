@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
 import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
@@ -6,10 +6,9 @@ import "./TradeLedger.css";
 
 // Define interfaces for auth context and user
 interface User {
-  email: string; // From GoogleAuthContext it's a string, not string | null
-  id: string; // From GoogleAuthContext
-  name?: string;
-  picture?: string;
+  email: string | null;
+  id?: string; // Support for old code using id
+  uid?: string; // Support for new code using uid
   [key: string]: any; // Allow for any additional properties
 }
 
@@ -54,59 +53,56 @@ const assignSeriesToTrades = (trades: Trade[]): Trade[] => {
   if (!trades || trades.length === 0) {
     return [];
   }
-
+  
   // Create a copy of trades to avoid mutating the original
   const tradesWithSeries = [...trades];
-
+  
   // Group trades by their common attributes
   const tradeGroups: { [key: string]: Trade[] } = {};
-
-  tradesWithSeries.forEach((trade) => {
+  
+  tradesWithSeries.forEach(trade => {
     // Create a unique key based on trade attributes that define a series
     const seriesKey = `${trade.tradeType}_${trade.level}_${trade.strikes.sellPut}_${trade.strikes.buyPut}_${trade.strikes.sellCall}_${trade.strikes.buyCall}`;
-
+    
     if (!tradeGroups[seriesKey]) {
       tradeGroups[seriesKey] = [];
     }
-
+    
     tradeGroups[seriesKey].push(trade);
   });
-
+  
   // Assign series IDs to trades in each group
   Object.entries(tradeGroups).forEach(([seriesKey, groupTrades]) => {
     // Only create a series if there are multiple trades with the same attributes
     if (groupTrades.length > 1) {
       // Use the earliest trade date as the basis for the series ID
-      const sortedByDate = [...groupTrades].sort(
-        (a, b) =>
-          new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime()
+      const sortedByDate = [...groupTrades].sort((a, b) => 
+        new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime()
       );
-
+      
       const seriesId = `series_${sortedByDate[0].id}`;
-
+      
       // Assign the series ID to all trades in this group
-      groupTrades.forEach((trade) => {
-        const tradeIndex = tradesWithSeries.findIndex((t) => t.id === trade.id);
+      groupTrades.forEach(trade => {
+        const tradeIndex = tradesWithSeries.findIndex(t => t.id === trade.id);
         if (tradeIndex >= 0) {
           tradesWithSeries[tradeIndex] = {
             ...tradesWithSeries[tradeIndex],
-            seriesId,
+            seriesId
           };
         }
       });
     }
   });
-
+  
   return tradesWithSeries;
 };
 
 // Main component
-const TradeLedger: React.FC<TradeLedgerProps> = ({
-  onTradeUpdate,
-}: TradeLedgerProps) => {
+const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Get user from auth context
   const { user } = useAuth();
-
+  
   // State for trades and UI
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -118,134 +114,115 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [groupBySeries, setGroupBySeries] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-
+  
   // Ref to track if sync is in progress to prevent multiple syncs
   const syncInProgressRef = useRef<boolean>(false);
 
   // Sync local trades with AWS
   const syncLocalTradesWithAWS = async () => {
     if (!user?.email || syncInProgressRef.current) {
-      console.log("Sync already in progress or no user email, skipping sync");
+      console.log('Sync already in progress or no user email, skipping sync');
       return;
     }
-
+    
     syncInProgressRef.current = true;
-    console.log("Starting sync of local trades with AWS...");
-
+    console.log('Starting sync of local trades with AWS...');
+    
     try {
       // Get trades from local storage
       const localStorageKey = `trades_${user.email}`;
       const storedData = localStorage.getItem(localStorageKey);
-
+      
       if (!storedData) {
-        console.log("No local trades found to sync");
+        console.log('No local trades found to sync');
         syncInProgressRef.current = false;
         return;
       }
-
+      
       const localTrades: Trade[] = JSON.parse(storedData);
-
+      
       // Find local-only trades (those with IDs starting with "local_" or containing "_modified")
-      const localOnlyTrades = localTrades.filter(
-        (trade) =>
-          trade.id.startsWith("local_") || trade.id.includes("_modified")
+      const localOnlyTrades = localTrades.filter(trade => 
+        trade.id.startsWith('local_') || trade.id.includes('_modified')
       );
-
+      
       if (localOnlyTrades.length === 0) {
-        console.log("No local-only trades found to sync");
+        console.log('No local-only trades found to sync');
         syncInProgressRef.current = false;
         return;
       }
-
-      console.log(
-        `Found ${localOnlyTrades.length} local trades to sync with AWS`
-      );
-
+      
+      console.log(`Found ${localOnlyTrades.length} local trades to sync with AWS`);
+      
       // Sync each local trade to AWS with retry logic
       for (const localTrade of localOnlyTrades) {
         let awsSuccess = false;
         let currentRetry = 0;
         const maxRetries = 3;
-
+        
         while (currentRetry < maxRetries && !awsSuccess) {
           try {
-            console.log(
-              `Syncing trade ${localTrade.id} to AWS (attempt ${
-                currentRetry + 1
-              }/${maxRetries})...`
-            );
-
+            console.log(`Syncing trade ${localTrade.id} to AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
+            
             let awsTrade: Trade | null = null;
-
-            if (localTrade.id.startsWith("local_")) {
+            
+            if (localTrade.id.startsWith('local_')) {
               // This is a new trade that needs to be created in AWS
               awsTrade = await createTrade({
                 ...localTrade,
                 userEmail: user.email,
-                userId: (user.id || "").toString(),
-              } as Trade);
-            } else if (localTrade.id.includes("_modified")) {
+                userId: ((user.id as string) || (user.uid as string) || '').toString()
+              });
+            } else if (localTrade.id.includes('_modified')) {
               // This is a modified trade that needs to be updated in AWS
-              const originalId = localTrade.id.split("_modified")[0];
+              const originalId = localTrade.id.split('_modified')[0];
               awsTrade = await updateTrade({
                 ...localTrade,
                 id: originalId, // Use the original ID for the update
                 userEmail: user.email,
-                userId: (user.id || "").toString(),
-              } as Trade);
+                userId: ((user.id as string) || (user.uid as string) || '').toString()
+              });
             }
-
+            
             if (awsTrade) {
               console.log(`Successfully synced trade ${localTrade.id} to AWS`);
-
+              
               // Update the local trade with the AWS version
-              const updatedLocalTrades = localTrades.map((trade) =>
+              const updatedLocalTrades = localTrades.map((trade: Trade) => 
                 trade.id === localTrade.id ? awsTrade! : trade
               );
-
+              
               // Update local storage and state
-              localStorage.setItem(
-                localStorageKey,
-                JSON.stringify(updatedLocalTrades)
-              );
-
-              const updatedTradesWithSeries =
-                assignSeriesToTrades(updatedLocalTrades);
+              localStorage.setItem(localStorageKey, JSON.stringify(updatedLocalTrades));
+              
+              const updatedTradesWithSeries = assignSeriesToTrades(updatedLocalTrades);
               setTrades(updatedTradesWithSeries);
-
+              
               if (onTradeUpdate) {
                 onTradeUpdate(updatedTradesWithSeries);
               }
-
+              
               awsSuccess = true;
             }
           } catch (error) {
-            console.error(
-              `Error syncing trade to AWS (attempt ${
-                currentRetry + 1
-              }/${maxRetries}):`,
-              error
-            );
+            console.error(`Error syncing trade to AWS (attempt ${currentRetry + 1}/${maxRetries}):`, error);
             // Exponential backoff for retries
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
-            );
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, currentRetry) * 1000));
           }
-
+          
           currentRetry++;
         }
-
+        
         if (!awsSuccess) {
-          console.error(
-            `Failed to sync trade ${localTrade.id} after ${maxRetries} attempts`
-          );
+          console.error(`Failed to sync trade ${localTrade.id} after ${maxRetries} attempts`);
         }
       }
-
-      console.log("Completed sync of local trades with AWS");
+      
+      console.log('Completed sync of local trades with AWS');
       setLastSyncTime(new Date());
+      
     } catch (error) {
-      console.error("Error in syncLocalTradesWithAWS:", error);
+      console.error('Error in syncLocalTradesWithAWS:', error);
     } finally {
       syncInProgressRef.current = false;
     }
@@ -254,31 +231,25 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   // Load trades with robust handling of local and AWS data
   const loadTrades = async () => {
     if (!user?.email) {
-      console.error("Cannot load trades: No user email");
+      console.error('Cannot load trades: No user email');
       setLoading(false);
       return;
     }
-
+    
     setLoading(true);
-    console.log("Loading trades for user:", user.email);
-
-    // Detect if user is on a mobile device
-    const isMobileDevice = /iPhone|iPad|iPod|Android/i.test(
-      navigator.userAgent
-    );
-    console.log("Device type:", isMobileDevice ? "Mobile" : "Desktop");
-
+    console.log('Loading trades for user:', user.email);
+    
     try {
       // First load from local storage for immediate display
       const localStorageKey = `trades_${user.email}`;
       const storedData = localStorage.getItem(localStorageKey);
       let localTrades: Trade[] = [];
-
+      
       if (storedData) {
         try {
           localTrades = JSON.parse(storedData);
-          console.log("Loaded trades from local storage:", localTrades.length);
-
+          console.log('Loaded trades from local storage:', localTrades.length);
+          
           // Update state with local trades immediately for fast UI response
           const tradesWithSeries = assignSeriesToTrades(localTrades);
           setTrades(tradesWithSeries);
@@ -286,225 +257,119 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
             onTradeUpdate(tradesWithSeries);
           }
         } catch (error) {
-          console.error("Error parsing local trades:", error);
+          console.error('Error parsing local trades:', error);
         }
       }
-
+      
       // Then fetch from AWS with cache busting
-      console.log("Fetching trades from AWS...");
-      let awsTrades: Trade[] = [];
-      let fetchAttempts = 0;
-      const maxFetchAttempts = isMobileDevice ? 3 : 1; // More retries for mobile devices
-
-      // Fetch with retry for mobile devices
-      while (fetchAttempts < maxFetchAttempts) {
-        try {
-          awsTrades = await fetchTrades(user.email);
-          console.log(
-            `AWS fetch attempt ${fetchAttempts + 1}: Got ${
-              awsTrades.length
-            } trades`
-          );
-
-          // If we got trades or we're not on mobile, break the retry loop
-          if (awsTrades.length > 0 || !isMobileDevice) {
-            break;
+      console.log('Fetching trades from AWS...');
+      const awsTrades = await fetchTrades(user.email);
+      console.log('Fetched trades from AWS:', awsTrades.length);
+      
+      // Merge AWS trades with local trades, preferring AWS versions
+      const mergedTrades = [...localTrades];
+      let hasChanges = false;
+      
+      // Update with AWS trades
+      if (awsTrades && awsTrades.length > 0) {
+        awsTrades.forEach(awsTrade => {
+          const localIndex = mergedTrades.findIndex(t => t.id === awsTrade.id);
+          
+          if (localIndex >= 0) {
+            // Trade exists locally, check if it's different
+            if (JSON.stringify(mergedTrades[localIndex]) !== JSON.stringify(awsTrade)) {
+              mergedTrades[localIndex] = awsTrade;
+              hasChanges = true;
+            }
+          } else {
+            // New trade from AWS, add it
+            mergedTrades.push(awsTrade);
+            hasChanges = true;
           }
-
-          // If on mobile and no trades returned, wait with exponential backoff before retrying
-          if (
-            isMobileDevice &&
-            awsTrades.length === 0 &&
-            fetchAttempts < maxFetchAttempts - 1
-          ) {
-            const backoffTime = Math.pow(2, fetchAttempts) * 1000;
-            console.log(
-              `No trades returned on mobile, retrying in ${backoffTime}ms...`
-            );
-            await new Promise((resolve) => setTimeout(resolve, backoffTime));
-          }
-
-          fetchAttempts++;
-        } catch (error) {
-          console.error(
-            `Error fetching trades (attempt ${fetchAttempts + 1}):`,
-            error
-          );
-          fetchAttempts++;
-
-          if (fetchAttempts < maxFetchAttempts) {
-            const backoffTime = Math.pow(2, fetchAttempts) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, backoffTime));
-          }
-        }
+        });
       }
-
-      // For mobile devices with AWS trades, prioritize AWS data completely
-      if (isMobileDevice && awsTrades.length > 0) {
-        console.log(
-          "Mobile device: Prioritizing AWS trades over local storage"
-        );
-        const tradesWithSeries = assignSeriesToTrades(awsTrades);
+      
+      // Check for local trades that need to be synced to AWS
+      const localOnlyTrades = mergedTrades.filter(trade => 
+        trade.id.startsWith('local_') || trade.id.includes('_modified')
+      );
+      
+      if (localOnlyTrades.length > 0) {
+        console.log('Found', localOnlyTrades.length, 'local trades that need to be synced to AWS');
+        // Trigger background sync
+        setTimeout(() => {
+          syncLocalTradesWithAWS();
+        }, 1000);
+      }
+      
+      // Update local storage and state if there were changes
+      if (hasChanges) {
+        console.log('Updating local storage with merged trades');
+        localStorage.setItem(localStorageKey, JSON.stringify(mergedTrades));
+        
+        const tradesWithSeries = assignSeriesToTrades(mergedTrades);
         setTrades(tradesWithSeries);
-        localStorage.setItem(localStorageKey, JSON.stringify(awsTrades));
         if (onTradeUpdate) {
           onTradeUpdate(tradesWithSeries);
         }
-      } else {
-        // For desktop or mobile with no AWS trades, merge as usual
-        const mergedTrades = [...localTrades];
-        let hasChanges = false;
-
-        // Update with AWS trades
-        if (awsTrades && awsTrades.length > 0) {
-          awsTrades.forEach((awsTrade) => {
-            const localIndex = mergedTrades.findIndex(
-              (t) => t.id === awsTrade.id
-            );
-
-            if (localIndex >= 0) {
-              // Trade exists locally, check if it's different
-              if (
-                JSON.stringify(mergedTrades[localIndex]) !==
-                JSON.stringify(awsTrade)
-              ) {
-                mergedTrades[localIndex] = awsTrade;
-                hasChanges = true;
-              }
-            } else {
-              // New trade from AWS, add it
-              mergedTrades.push(awsTrade);
-              hasChanges = true;
-            }
-          });
-        }
-
-        // Check for local trades that need to be synced to AWS
-        const localOnlyTrades = mergedTrades.filter(
-          (trade) =>
-            trade.id.startsWith("local_") || trade.id.includes("_modified")
-        );
-
-        if (localOnlyTrades.length > 0) {
-          console.log(
-            "Found",
-            localOnlyTrades.length,
-            "local trades that need to be synced to AWS"
-          );
-          // Trigger background sync
-          setTimeout(() => {
-            syncLocalTradesWithAWS();
-          }, 1000);
-        }
-
-        // Update local storage and state if there were changes
-        if (hasChanges) {
-          console.log("Updating local storage with merged trades");
-          localStorage.setItem(localStorageKey, JSON.stringify(mergedTrades));
-
-          const tradesWithSeries = assignSeriesToTrades(mergedTrades);
-          setTrades(tradesWithSeries);
-          if (onTradeUpdate) {
-            onTradeUpdate(tradesWithSeries);
-          }
-        }
       }
-
+      
       // Do a secondary fetch after a delay to ensure we have the latest data
-      // Use a longer delay for mobile devices
-      const secondaryFetchDelay = isMobileDevice ? 10000 : 2000;
-
       setTimeout(async () => {
         try {
-          console.log("Performing secondary fetch to ensure latest data...");
           const latestAwsTrades = await fetchTrades(user.email!);
-
           if (latestAwsTrades && latestAwsTrades.length > 0) {
-            // For mobile devices that initially had no AWS trades but get trades on secondary fetch
-            if (
-              isMobileDevice &&
-              awsTrades.length === 0 &&
-              latestAwsTrades.length > 0
-            ) {
-              console.log(
-                "Mobile device: Secondary fetch found trades when initial fetch had none. Replacing local trades."
-              );
-              localStorage.setItem(
-                localStorageKey,
-                JSON.stringify(latestAwsTrades)
-              );
-
-              const updatedTradesWithSeries =
-                assignSeriesToTrades(latestAwsTrades);
+            const currentTrades = [...mergedTrades];
+            let secondaryChanges = false;
+            
+            latestAwsTrades.forEach(awsTrade => {
+              const index = currentTrades.findIndex(t => t.id === awsTrade.id);
+              if (index >= 0) {
+                // Check if different
+                if (JSON.stringify(currentTrades[index]) !== JSON.stringify(awsTrade)) {
+                  currentTrades[index] = awsTrade;
+                  secondaryChanges = true;
+                }
+              } else {
+                // New trade
+                currentTrades.push(awsTrade);
+                secondaryChanges = true;
+              }
+            });
+            
+            if (secondaryChanges) {
+              console.log('Secondary fetch found changes, updating...');
+              localStorage.setItem(localStorageKey, JSON.stringify(currentTrades));
+              
+              const updatedTradesWithSeries = assignSeriesToTrades(currentTrades);
               setTrades(updatedTradesWithSeries);
               if (onTradeUpdate) {
                 onTradeUpdate(updatedTradesWithSeries);
               }
-            } else {
-              // Normal merge for desktop or mobile that already had trades
-              const currentTrades = [...trades];
-              let secondaryChanges = false;
-
-              latestAwsTrades.forEach((awsTrade) => {
-                const index = currentTrades.findIndex(
-                  (t) => t.id === awsTrade.id
-                );
-                if (index >= 0) {
-                  // Check if different
-                  if (
-                    JSON.stringify(currentTrades[index]) !==
-                    JSON.stringify(awsTrade)
-                  ) {
-                    currentTrades[index] = awsTrade;
-                    secondaryChanges = true;
-                  }
-                } else {
-                  // New trade
-                  currentTrades.push(awsTrade);
-                  secondaryChanges = true;
-                }
-              });
-
-              if (secondaryChanges) {
-                console.log("Secondary fetch found changes, updating...");
-                localStorage.setItem(
-                  localStorageKey,
-                  JSON.stringify(currentTrades)
-                );
-
-                const updatedTradesWithSeries =
-                  assignSeriesToTrades(currentTrades);
-                setTrades(updatedTradesWithSeries);
-                if (onTradeUpdate) {
-                  onTradeUpdate(updatedTradesWithSeries);
-                }
-              }
             }
           }
         } catch (error) {
-          console.error("Error in secondary fetch:", error);
+          console.error('Error in secondary fetch:', error);
         }
-      }, secondaryFetchDelay);
+      }, 2000);
+      
     } catch (error) {
-      console.error("Error loading trades:", error);
-
+      console.error('Error loading trades:', error);
+      
       // Try local storage as fallback if API fails
       if (user?.email) {
         const storedTrades = localStorage.getItem(`trades_${user.email}`);
         if (storedTrades) {
           try {
             const parsedTrades = JSON.parse(storedTrades);
-            console.log(
-              "API failed, using local storage as fallback:",
-              parsedTrades.length
-            );
+            console.log('API failed, using local storage as fallback:', parsedTrades.length);
             const tradesWithSeries = assignSeriesToTrades(parsedTrades);
             setTrades(tradesWithSeries);
             if (onTradeUpdate) {
               onTradeUpdate(tradesWithSeries);
             }
           } catch (parseError) {
-            console.error("Error parsing stored trades:", parseError);
+            console.error('Error parsing stored trades:', parseError);
           }
         }
       }
@@ -518,27 +383,27 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   useEffect(() => {
     // Don't run if no user is logged in
     if (!user?.email) return;
-
-    console.log("Setting up periodic background sync...");
-
+    
+    console.log('Setting up periodic background sync...');
+    
     // Initial sync after a short delay
     const initialSyncTimeout = setTimeout(() => {
       syncLocalTradesWithAWS();
     }, 5000);
-
+    
     // Set up interval for periodic sync (every 2 minutes)
     const syncInterval = setInterval(() => {
-      console.log("Running periodic background sync...");
+      console.log('Running periodic background sync...');
       if (!syncInProgressRef.current && user?.email) {
         loadTrades();
-
+        
         // After loading trades, sync any local changes to AWS
         setTimeout(() => {
           syncLocalTradesWithAWS();
         }, 1000);
       }
     }, 120000); // 2 minutes
-
+    
     // Clean up on unmount
     return () => {
       clearTimeout(initialSyncTimeout);
@@ -549,143 +414,133 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   // Fetch trades on component mount
   useEffect(() => {
     if (user?.email) {
-      console.log("User logged in or changed, loading trades and syncing...");
+      console.log('User logged in or changed, loading trades and syncing...');
       loadTrades();
     }
   }, [user]);
-
+  
   // Save trades to local storage whenever they change
   useEffect(() => {
     if (user?.email && trades.length > 0) {
-      console.log("Saving trades to local storage:", trades.length);
+      console.log('Saving trades to local storage:', trades.length);
       localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
     }
   }, [trades, user?.email]);
 
-  // Add a new trade to the ledger
-  const addTrade = async (trade: Partial<Trade>) => {
+  // Add a new trade with proper AWS sync and local storage update
+  const addTrade = async (newTrade: Partial<Trade>) => {
     if (!user?.email) {
-      console.error("Cannot add trade: No user email");
+      console.error('Cannot add trade: No user email');
       return;
     }
-
+    
     try {
       setLoading(true);
-
-      // Generate a temporary local ID
-      const localId = `local_${Date.now()}_${Math.random()
-        .toString(36)
-        .substring(2, 9)}`;
-
-      // Create a new trade object with required fields
-      const newTrade: Trade = {
+      
+      // Generate a local ID for immediate UI update
+      const localId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // Create a complete Trade object from the partial data
+      const tradeWithLocalId: Trade = {
         id: localId,
-        userEmail: user.email,
-        userId: (user.id || "").toString(),
-        tradeDate: trade.tradeDate || new Date().toISOString().split("T")[0],
-        entryDate: new Date().toISOString(),
-        level: trade.level || "Level 2",
-        contractQuantity: trade.contractQuantity || 1,
-        entryPremium: trade.entryPremium || 0,
-        tradeType:
-          (trade.tradeType as "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD") ||
-          "IRON_CONDOR",
-        strikes: {
-          sellPut: trade.strikes?.sellPut || 0,
-          buyPut: trade.strikes?.buyPut || 0,
-          sellCall: trade.strikes?.sellCall || 0,
-          buyCall: trade.strikes?.buyCall || 0,
-        },
-        status: "OPEN",
-        fees: trade.fees || 6.56,
-        notes: trade.notes || "",
-        isAutoPopulated: false,
-        matrix: trade.matrix || "standard",
-        buyingPower: trade.buyingPower || "$26,350",
+        userEmail: user.email || '',
+        userId: ((user.id as string) || (user.uid as string) || '').toString(),
+        tradeDate: newTrade.tradeDate || new Date().toISOString().split('T')[0],
+        entryDate: newTrade.entryDate || new Date().toISOString().split('T')[0],
+        level: newTrade.level || 'Level 2',
+        contractQuantity: newTrade.contractQuantity || 1,
+        entryPremium: newTrade.entryPremium || 0,
+        tradeType: newTrade.tradeType || 'IRON_CONDOR',
+        strikes: newTrade.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+        status: newTrade.status || 'OPEN',
+        fees: newTrade.fees || 6.56,
+        isAutoPopulated: newTrade.isAutoPopulated || false,
+        matrix: newTrade.matrix || 'standard',
+        buyingPower: newTrade.buyingPower || '$26,350',
+        ...newTrade
       };
-
+      
       // Update local state immediately for responsive UI
-      const updatedTrades = [...trades, newTrade];
+      const updatedTrades = [...trades, tradeWithLocalId];
       const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
       setTrades(updatedTradesWithSeries);
-
+      
       // Update local storage
       if (user.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
-        );
+        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTradesWithSeries));
       }
-
+      
       // Notify parent if callback exists
       if (onTradeUpdate) {
         onTradeUpdate(updatedTradesWithSeries);
       }
-
+      
       // Try to sync to AWS with retry logic
       let awsSuccess = false;
       let currentRetry = 0;
       const maxRetries = 3;
       let awsTrade: Trade | null = null;
-
+      
       while (currentRetry < maxRetries && !awsSuccess) {
         try {
-          console.log(
-            `Creating trade in AWS (attempt ${
-              currentRetry + 1
-            }/${maxRetries})...`
-          );
-
-          awsTrade = await createTrade({
-            ...newTrade,
-            userEmail: user.email,
-            userId: (user.id || "").toString(),
-          } as Trade);
-
+          console.log(`Creating trade in AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
+          
+          // Create a complete Trade object for the API call
+          const completeTradeForAPI: Trade = {
+            id: localId, // Will be replaced by AWS
+            userEmail: user.email || '',
+            userId: ((user.id as string) || (user.uid as string) || '').toString(),
+            tradeDate: newTrade.tradeDate || new Date().toISOString().split('T')[0],
+            entryDate: newTrade.entryDate || new Date().toISOString().split('T')[0],
+            level: newTrade.level || 'Level 2',
+            contractQuantity: newTrade.contractQuantity || 1,
+            entryPremium: newTrade.entryPremium || 0,
+            tradeType: newTrade.tradeType || 'IRON_CONDOR',
+            strikes: newTrade.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+            status: newTrade.status || 'OPEN',
+            fees: newTrade.fees || 6.56,
+            isAutoPopulated: newTrade.isAutoPopulated || false,
+            matrix: newTrade.matrix || 'standard',
+            buyingPower: newTrade.buyingPower || '$26,350',
+            ...newTrade
+          };
+          
+          awsTrade = await createTrade(completeTradeForAPI);
+          
           if (awsTrade) {
-            console.log("Successfully created trade in AWS:", awsTrade.id);
+            console.log('Successfully created trade in AWS:', awsTrade.id);
             awsSuccess = true;
           }
         } catch (error) {
-          console.error(
-            `Error creating trade in AWS (attempt ${
-              currentRetry + 1
-            }/${maxRetries}):`,
-            error
-          );
+          console.error(`Error creating trade in AWS (attempt ${currentRetry + 1}/${maxRetries}):`, error);
           // Exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
-          );
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, currentRetry) * 1000));
         }
-
+        
         currentRetry++;
       }
-
+      
       // If AWS sync was successful, update the local trade with the AWS version
       if (awsSuccess && awsTrade) {
-        const finalUpdatedTrades = updatedTrades.map((trade) =>
+        const finalUpdatedTrades = updatedTrades.map((trade: Trade) => 
           trade.id === localId ? awsTrade! : trade
         );
-
+        
         const finalTradesWithSeries = assignSeriesToTrades(finalUpdatedTrades);
         setTrades(finalTradesWithSeries);
-
+        
         // Update local storage
         if (user.email) {
-          localStorage.setItem(
-            `trades_${user.email}`,
-            JSON.stringify(finalTradesWithSeries)
-          );
+          localStorage.setItem(`trades_${user.email}`, JSON.stringify(finalTradesWithSeries));
         }
-
+        
         // Notify parent if callback exists
         if (onTradeUpdate) {
           onTradeUpdate(finalTradesWithSeries);
         }
       }
+      
     } catch (error) {
-      console.error("Error adding trade:", error);
+      console.error('Error adding trade:', error);
     } finally {
       setLoading(false);
     }
@@ -694,115 +549,105 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   // Update an existing trade with proper AWS sync
   const updateTradeHandler = async (updatedTrade: Partial<Trade>) => {
     if (!user?.email) {
-      console.error("Cannot update trade: No user email");
+      console.error('Cannot update trade: No user email');
       return;
     }
-
+    
     try {
       setLoading(true);
-
+      
       // Create a modified version with a special ID to track local changes
-      if (!updatedTrade.id) {
-        console.error("Cannot update trade: No trade ID");
+      const modifiedId = `${updatedTrade.id}_modified`;
+      // Get the original trade to merge with the updates
+      const originalTrade = trades.find((t: Trade) => t.id === updatedTrade.id);
+      
+      if (!originalTrade) {
+        console.error('Cannot update trade: Original trade not found');
         setLoading(false);
         return;
       }
-
-      const modifiedId = `${updatedTrade.id}_modified`;
-      const tradeWithModifiedId = {
+      
+      // Create a complete Trade object by merging original with updates
+      const tradeWithModifiedId: Trade = {
+        ...originalTrade,
         ...updatedTrade,
-        id: modifiedId,
-      } as Trade;
-
+        id: modifiedId
+      };
+      
       // Update local state immediately
-      const updatedTrades = trades.map((trade) =>
+      const updatedTrades = trades.map((trade: Trade) => 
         trade.id === updatedTrade.id ? tradeWithModifiedId : trade
       );
-
+      
       const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
       setTrades(updatedTradesWithSeries);
-
+      
       // Update local storage
       if (user.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
-        );
+        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTradesWithSeries));
       }
-
+      
       // Notify parent if callback exists
       if (onTradeUpdate) {
         onTradeUpdate(updatedTradesWithSeries);
       }
-
+      
       // Try to sync to AWS with retry logic
       let awsSuccess = false;
       let currentRetry = 0;
       const maxRetries = 3;
       let awsTrade: Trade | null = null;
-
+      
       while (currentRetry < maxRetries && !awsSuccess) {
         try {
-          console.log(
-            `Updating trade in AWS (attempt ${
-              currentRetry + 1
-            }/${maxRetries})...`
-          );
-
-          // Make sure we have a valid ID for the update
-          const originalId = updatedTrade.id!.replace("_modified", "");
-
-          awsTrade = await updateTrade({
+          console.log(`Updating trade in AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
+          
+          // Create a complete Trade object for the API call
+          const completeTradeForAPI: Trade = {
+            ...originalTrade,
             ...updatedTrade,
-            id: originalId, // Use the original ID for the update
-            userEmail: user.email,
-            userId: (user.id || "").toString(),
-          } as Trade);
-
+            id: originalTrade.id, // Use the original ID for the update
+            userEmail: user.email || '',
+            userId: ((user.id as string) || (user.uid as string) || '').toString()
+          };
+          
+          awsTrade = await updateTrade(completeTradeForAPI);
+          
           if (awsTrade) {
-            console.log("Successfully updated trade in AWS:", awsTrade.id);
+            console.log('Successfully updated trade in AWS:', awsTrade.id);
             awsSuccess = true;
           }
         } catch (error) {
-          console.error(
-            `Error updating trade in AWS (attempt ${
-              currentRetry + 1
-            }/${maxRetries}):`,
-            error
-          );
+          console.error(`Error updating trade in AWS (attempt ${currentRetry + 1}/${maxRetries}):`, error);
           // Exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
-          );
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, currentRetry) * 1000));
         }
-
+        
         currentRetry++;
       }
-
+      
       // If AWS sync was successful, update the local trade with the AWS version
       if (awsSuccess && awsTrade) {
-        const finalUpdatedTrades = updatedTrades.map((trade) =>
+        const finalUpdatedTrades = updatedTrades.map((trade: Trade) => 
           trade.id === modifiedId ? awsTrade! : trade
         );
-
+        
         const finalTradesWithSeries = assignSeriesToTrades(finalUpdatedTrades);
         setTrades(finalTradesWithSeries);
-
+        
         // Update local storage
         if (user.email) {
-          localStorage.setItem(
-            `trades_${user.email}`,
-            JSON.stringify(finalTradesWithSeries)
-          );
+          localStorage.setItem(`trades_${user.email}`, JSON.stringify(finalTradesWithSeries));
         }
-
+        
         // Notify parent if callback exists
         if (onTradeUpdate) {
           onTradeUpdate(finalTradesWithSeries);
         }
       }
+      
     } catch (error) {
-      console.error("Error updating trade:", error);
+      console.error('Error updating trade:', error);
     } finally {
       setLoading(false);
     }
@@ -811,113 +656,93 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   // Delete a trade with proper AWS sync
   const deleteTradeHandler = async (tradeId: string) => {
     if (!user?.email) {
-      console.error("Cannot delete trade: No user email");
+      console.error('Cannot delete trade: No user email');
       return;
     }
-
+    
     try {
       setLoading(true);
-
+      
       // Find the trade to delete
-      const tradeToDelete = trades.find((trade) => trade.id === tradeId);
+      const tradeToDelete = trades.find(trade => trade.id === tradeId);
       if (!tradeToDelete) {
-        console.error("Trade not found for deletion:", tradeId);
+        console.error('Trade not found for deletion:', tradeId);
         setLoading(false);
         return;
       }
-
+      
       // Remove from local state immediately
-      const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
+      const updatedTrades = trades.filter(trade => trade.id !== tradeId);
       const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
       setTrades(updatedTradesWithSeries);
-
+      
       // Update local storage
       if (user.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
-        );
+        localStorage.setItem(`trades_${user.email}`, JSON.stringify(updatedTradesWithSeries));
       }
-
+      
       // Notify parent if callback exists
       if (onTradeUpdate) {
         onTradeUpdate(updatedTradesWithSeries);
       }
-
+      
       // Only try to delete from AWS if it's not a local-only trade
-      if (!tradeId.startsWith("local_")) {
+      if (!tradeId.startsWith('local_')) {
         // Try to sync deletion to AWS with retry logic
         let awsSuccess = false;
         let currentRetry = 0;
         const maxRetries = 3;
-
+        
         while (currentRetry < maxRetries && !awsSuccess) {
           try {
-            console.log(
-              `Deleting trade from AWS (attempt ${
-                currentRetry + 1
-              }/${maxRetries})...`
-            );
-
+            console.log(`Deleting trade from AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
+            
             await deleteTrade(tradeId);
-            console.log("Successfully deleted trade from AWS:", tradeId);
+            console.log('Successfully deleted trade from AWS:', tradeId);
             awsSuccess = true;
           } catch (error) {
-            console.error(
-              `Error deleting trade from AWS (attempt ${
-                currentRetry + 1
-              }/${maxRetries}):`,
-              error
-            );
+            console.error(`Error deleting trade from AWS (attempt ${currentRetry + 1}/${maxRetries}):`, error);
             // Exponential backoff
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
-            );
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, currentRetry) * 1000));
           }
-
+          
           currentRetry++;
         }
-
+        
         if (!awsSuccess) {
-          console.error(
-            `Failed to delete trade ${tradeId} from AWS after ${maxRetries} attempts`
-          );
+          console.error(`Failed to delete trade ${tradeId} from AWS after ${maxRetries} attempts`);
         }
       }
+      
     } catch (error) {
-      console.error("Error deleting trade:", error);
+      console.error('Error deleting trade:', error);
     } finally {
       setLoading(false);
     }
   };
 
   // Close a trade by updating its status and exit details
-  const closeTradeHandler = async (
-    tradeId: string,
-    exitPrice: number,
-    exitDate: string,
-    spxClosePrice?: number
-  ) => {
+  const closeTradeHandler = async (tradeId: string, exitPrice: number, exitDate: string, spxClosePrice?: number) => {
     if (!user?.email) {
-      console.error("Cannot close trade: No user email");
+      console.error('Cannot close trade: No user email');
       return;
     }
-
+    
     try {
       // Find the trade to close
-      const tradeToClose = trades.find((trade) => trade.id === tradeId);
+      const tradeToClose = trades.find((trade: Trade) => trade.id === tradeId);
       if (!tradeToClose) {
-        console.error("Trade not found for closing:", tradeId);
+        console.error('Trade not found for closing:', tradeId);
         return;
       }
-
+      
       // Calculate P&L
       const entryPremium = tradeToClose.entryPremium;
       const contractQuantity = tradeToClose.contractQuantity;
       const fees = tradeToClose.fees || 0;
-
-      let pnl = (exitPrice - entryPremium) * 100 * contractQuantity - fees;
-
+      
+      let pnl = ((exitPrice - entryPremium) * 100 * contractQuantity) - fees;
+      
       // Check if this is a max profit scenario
       let isMaxProfit = false;
       if (tradeToClose.tradeType === "IRON_CONDOR") {
@@ -930,7 +755,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
         // For call spread, max profit is when spread expires worthless (below strikes)
         isMaxProfit = exitPrice <= 0.05;
       }
-
+      
       // Create updated trade object
       const updatedTrade: Trade = {
         ...tradeToClose,
@@ -939,13 +764,14 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
         exitPremium: exitPrice,
         pnl,
         isMaxProfit,
-        spxClosePrice,
+        spxClosePrice
       };
-
+      
       // Use the update handler to sync with AWS
       await updateTradeHandler(updatedTrade);
+      
     } catch (error) {
-      console.error("Error closing trade:", error);
+      console.error('Error closing trade:', error);
     }
   };
 
@@ -969,12 +795,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   const handleSpxSubmit = () => {
     if (tradeToClose) {
       const spxPrice = spxClosePrice ? parseFloat(spxClosePrice) : undefined;
-      closeTradeHandler(
-        tradeToClose.id,
-        tradeToClose.entryPremium,
-        new Date().toISOString(),
-        spxPrice
-      );
+      closeTradeHandler(tradeToClose.id, tradeToClose.entryPremium, new Date().toISOString(), spxPrice);
       setShowSpxDialog(false);
       setTradeToClose(null);
       setSpxClosePrice("");
@@ -982,14 +803,14 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   };
 
   // Filter trades based on status
-  const filteredTrades = trades.filter((trade) => {
+  const filteredTrades = trades.filter(trade => {
     if (filterStatus === "ALL") return true;
     return trade.status === filterStatus;
   });
 
   // Group trades by series if enabled
   const displayTrades = groupBySeries
-    ? filteredTrades.reduce((acc: { [key: string]: Trade[] }, trade) => {
+    ? filteredTrades.reduce((acc: { [key: string]: Trade[] }, trade: Trade) => {
         const key = trade.seriesId || trade.id;
         if (!acc[key]) acc[key] = [];
         acc[key].push(trade);
@@ -1040,37 +861,24 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
         <div className="loading">Loading trades...</div>
       ) : (
         <div className="trades-container">
-          {Object.entries(displayTrades).map(([key, groupTrades]) => {
+          {Object.entries(displayTrades as Record<string, Trade[]>).map(([key, groupTrades]) => {
             // Skip empty groups
-            if (!Array.isArray(groupTrades) || groupTrades.length === 0)
-              return null;
-
+            if (!Array.isArray(groupTrades) || groupTrades.length === 0) return null;
+            
             // For individual display or single-trade series
-            if (key === "individual" || groupTrades.length === 1) {
-              return groupTrades.map((trade) => (
-                <div
-                  key={trade.id}
-                  className={`trade-card ${trade.status.toLowerCase()}`}
-                >
+            if (key === 'individual' || groupTrades.length === 1) {
+              return groupTrades.map((trade: Trade) => (
+                <div key={trade.id} className={`trade-card ${trade.status.toLowerCase()}`}>
                   <div className="trade-header">
-                    <h3>
-                      {trade.tradeType.replace("_", " ")} - {trade.level}
-                    </h3>
+                    <h3>{trade.tradeType.replace('_', ' ')} - {trade.level}</h3>
                     <div className="trade-status">{trade.status}</div>
                   </div>
                   <div className="trade-details">
                     <div className="trade-dates">
-                      <div>
-                        Trade Date:{" "}
-                        {new Date(trade.tradeDate).toLocaleDateString()}
-                      </div>
-                      <div>
-                        Entry: {new Date(trade.entryDate).toLocaleDateString()}
-                      </div>
+                      <div>Trade Date: {new Date(trade.tradeDate).toLocaleDateString()}</div>
+                      <div>Entry: {new Date(trade.entryDate).toLocaleDateString()}</div>
                       {trade.exitDate && (
-                        <div>
-                          Exit: {new Date(trade.exitDate).toLocaleDateString()}
-                        </div>
+                        <div>Exit: {new Date(trade.exitDate).toLocaleDateString()}</div>
                       )}
                     </div>
                     <div className="trade-strikes">
@@ -1086,15 +894,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
                         <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
                       )}
                       {trade.pnl !== undefined && (
-                        <div
-                          className={`pnl ${
-                            trade.pnl >= 0 ? "profit" : "loss"
-                          }`}
-                        >
+                        <div className={`pnl ${trade.pnl >= 0 ? 'profit' : 'loss'}`}>
                           P&L: ${trade.pnl.toFixed(2)}
-                          {trade.isMaxProfit && (
-                            <span className="max-profit">MAX</span>
-                          )}
+                          {trade.isMaxProfit && <span className="max-profit">MAX</span>}
                         </div>
                       )}
                     </div>
@@ -1103,12 +905,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
                         SPX Close: {trade.spxClosePrice}
                       </div>
                     )}
-                    {trade.notes && (
-                      <div className="trade-notes">{trade.notes}</div>
-                    )}
+                    {trade.notes && <div className="trade-notes">{trade.notes}</div>}
                   </div>
                   <div className="trade-actions">
-                    <button onClick={() => handleEditTrade(trade)}>Edit</button>
+                    <button onClick={() => handleEditTrade(trade)}>
+                      Edit
+                    </button>
                     {trade.status === "OPEN" && (
                       <button onClick={() => handleCloseTrade(trade)}>
                         Close
@@ -1121,45 +923,30 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
                 </div>
               ));
             }
-
+            
             // For multi-trade series
             const firstTrade = groupTrades[0];
             return (
               <div key={key} className="trade-series">
                 <div className="series-header">
-                  <h3>
-                    {firstTrade.tradeType.replace("_", " ")} Series -{" "}
-                    {firstTrade.level}
-                  </h3>
+                  <h3>{firstTrade.tradeType.replace('_', ' ')} Series - {firstTrade.level}</h3>
                   <div className="series-strikes">
-                    {firstTrade.strikes.sellPut}/{firstTrade.strikes.buyPut} -
+                    {firstTrade.strikes.sellPut}/{firstTrade.strikes.buyPut} - 
                     {firstTrade.strikes.sellCall}/{firstTrade.strikes.buyCall}
                   </div>
                 </div>
                 <div className="series-trades">
-                  {groupTrades.map((trade) => (
-                    <div
-                      key={trade.id}
-                      className={`series-trade ${trade.status.toLowerCase()}`}
-                    >
+                  {groupTrades.map((trade: Trade) => (
+                    <div key={trade.id} className={`series-trade ${trade.status.toLowerCase()}`}>
                       <div className="trade-header">
-                        <div>
-                          Trade Date:{" "}
-                          {new Date(trade.tradeDate).toLocaleDateString()}
-                        </div>
+                        <div>Trade Date: {new Date(trade.tradeDate).toLocaleDateString()}</div>
                         <div className="trade-status">{trade.status}</div>
                       </div>
                       <div className="trade-details">
                         <div className="trade-dates">
-                          <div>
-                            Entry:{" "}
-                            {new Date(trade.entryDate).toLocaleDateString()}
-                          </div>
+                          <div>Entry: {new Date(trade.entryDate).toLocaleDateString()}</div>
                           {trade.exitDate && (
-                            <div>
-                              Exit:{" "}
-                              {new Date(trade.exitDate).toLocaleDateString()}
-                            </div>
+                            <div>Exit: {new Date(trade.exitDate).toLocaleDateString()}</div>
                           )}
                         </div>
                         <div className="trade-financials">
@@ -1169,15 +956,9 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
                             <div>Exit: ${trade.exitPremium.toFixed(2)}</div>
                           )}
                           {trade.pnl !== undefined && (
-                            <div
-                              className={`pnl ${
-                                trade.pnl >= 0 ? "profit" : "loss"
-                              }`}
-                            >
+                            <div className={`pnl ${trade.pnl >= 0 ? 'profit' : 'loss'}`}>
                               P&L: ${trade.pnl.toFixed(2)}
-                              {trade.isMaxProfit && (
-                                <span className="max-profit">MAX</span>
-                              )}
+                              {trade.isMaxProfit && <span className="max-profit">MAX</span>}
                             </div>
                           )}
                         </div>
@@ -1208,13 +989,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
       {showAddTrade && (
         <div className="modal">
           <div className="modal-content">
-            <span className="close" onClick={() => setShowAddTrade(false)}>
-              &times;
-            </span>
+            <span className="close" onClick={() => setShowAddTrade(false)}>&times;</span>
             <h2>Add New Trade</h2>
             <TradeForm
-              onSave={(trade) => {
-                addTrade(trade);
+              onSave={(trade: Partial<Trade>) => {
+                addTrade(trade as Trade);
                 setShowAddTrade(false);
               }}
               onCancel={() => setShowAddTrade(false)}
@@ -1227,14 +1006,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
       {tradeToEdit && (
         <div className="modal">
           <div className="modal-content">
-            <span className="close" onClick={() => setTradeToEdit(null)}>
-              &times;
-            </span>
+            <span className="close" onClick={() => setTradeToEdit(null)}>&times;</span>
             <h2>Edit Trade</h2>
             <TradeForm
               trade={tradeToEdit}
-              onSave={(trade) => {
-                updateTradeHandler(trade);
+              onSave={(trade: Partial<Trade>) => {
+                updateTradeHandler(trade as Trade);
                 setTradeToEdit(null);
               }}
               onCancel={() => setTradeToEdit(null)}
@@ -1247,15 +1024,10 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
       {showSpxDialog && tradeToClose && (
         <div className="modal">
           <div className="modal-content">
-            <span
-              className="close"
-              onClick={() => {
-                setShowSpxDialog(false);
-                setTradeToClose(null);
-              }}
-            >
-              &times;
-            </span>
+            <span className="close" onClick={() => {
+              setShowSpxDialog(false);
+              setTradeToClose(null);
+            }}>&times;</span>
             <h2>Enter SPX Close Price</h2>
             <div className="spx-form">
               <label>
@@ -1277,3 +1049,4 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
 };
 
 export default TradeLedger;
+
