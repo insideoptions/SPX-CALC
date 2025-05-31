@@ -9,7 +9,6 @@ interface User {
   email: string | null;
   id?: string; // Support for old code using id
   uid?: string; // Support for new code using uid
-  [key: string]: any; // Allow for any additional properties
 }
 
 // Trade interface
@@ -171,7 +170,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               awsTrade = await createTrade({
                 ...localTrade,
                 userEmail: user.email,
-                userId: ((user.id as string) || (user.uid as string) || '').toString()
+                userId: user.id || user.uid || ''
               });
             } else if (localTrade.id.includes('_modified')) {
               // This is a modified trade that needs to be updated in AWS
@@ -180,7 +179,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 ...localTrade,
                 id: originalId, // Use the original ID for the update
                 userEmail: user.email,
-                userId: ((user.id as string) || (user.uid as string) || '').toString()
+                userId: user.id || user.uid || ''
               });
             }
             
@@ -188,7 +187,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               console.log(`Successfully synced trade ${localTrade.id} to AWS`);
               
               // Update the local trade with the AWS version
-              const updatedLocalTrades = localTrades.map((trade: Trade) => 
+              const updatedLocalTrades = localTrades.map(trade => 
                 trade.id === localTrade.id ? awsTrade! : trade
               );
               
@@ -428,7 +427,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   }, [trades, user?.email]);
 
   // Add a new trade with proper AWS sync and local storage update
-  const addTrade = async (newTrade: Partial<Trade>) => {
+  const addTrade = async (newTrade: Trade) => {
     if (!user?.email) {
       console.error('Cannot add trade: No user email');
       return;
@@ -439,24 +438,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       
       // Generate a local ID for immediate UI update
       const localId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      // Create a complete Trade object from the partial data
       const tradeWithLocalId: Trade = {
+        ...newTrade,
         id: localId,
-        userEmail: user.email || '',
-        userId: ((user.id as string) || (user.uid as string) || '').toString(),
-        tradeDate: newTrade.tradeDate || new Date().toISOString().split('T')[0],
-        entryDate: newTrade.entryDate || new Date().toISOString().split('T')[0],
-        level: newTrade.level || 'Level 2',
-        contractQuantity: newTrade.contractQuantity || 1,
-        entryPremium: newTrade.entryPremium || 0,
-        tradeType: newTrade.tradeType || 'IRON_CONDOR',
-        strikes: newTrade.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
-        status: newTrade.status || 'OPEN',
-        fees: newTrade.fees || 6.56,
-        isAutoPopulated: newTrade.isAutoPopulated || false,
-        matrix: newTrade.matrix || 'standard',
-        buyingPower: newTrade.buyingPower || '$26,350',
-        ...newTrade
+        userEmail: user.email,
+        userId: user.id || user.uid || ''
       };
       
       // Update local state immediately for responsive UI
@@ -484,27 +470,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         try {
           console.log(`Creating trade in AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
           
-          // Create a complete Trade object for the API call
-          const completeTradeForAPI: Trade = {
-            id: localId, // Will be replaced by AWS
-            userEmail: user.email || '',
-            userId: ((user.id as string) || (user.uid as string) || '').toString(),
-            tradeDate: newTrade.tradeDate || new Date().toISOString().split('T')[0],
-            entryDate: newTrade.entryDate || new Date().toISOString().split('T')[0],
-            level: newTrade.level || 'Level 2',
-            contractQuantity: newTrade.contractQuantity || 1,
-            entryPremium: newTrade.entryPremium || 0,
-            tradeType: newTrade.tradeType || 'IRON_CONDOR',
-            strikes: newTrade.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
-            status: newTrade.status || 'OPEN',
-            fees: newTrade.fees || 6.56,
-            isAutoPopulated: newTrade.isAutoPopulated || false,
-            matrix: newTrade.matrix || 'standard',
-            buyingPower: newTrade.buyingPower || '$26,350',
-            ...newTrade
-          };
-          
-          awsTrade = await createTrade(completeTradeForAPI);
+          awsTrade = await createTrade({
+            ...newTrade,
+            userEmail: user.email,
+            userId: user.id || user.uid || ''
+          });
           
           if (awsTrade) {
             console.log('Successfully created trade in AWS:', awsTrade.id);
@@ -521,7 +491,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       
       // If AWS sync was successful, update the local trade with the AWS version
       if (awsSuccess && awsTrade) {
-        const finalUpdatedTrades = updatedTrades.map((trade: Trade) => 
+        const finalUpdatedTrades = updatedTrades.map(trade => 
           trade.id === localId ? awsTrade! : trade
         );
         
@@ -547,7 +517,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   };
 
   // Update an existing trade with proper AWS sync
-  const updateTradeHandler = async (updatedTrade: Partial<Trade>) => {
+  const updateTradeHandler = async (updatedTrade: Trade) => {
     if (!user?.email) {
       console.error('Cannot update trade: No user email');
       return;
@@ -558,24 +528,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       
       // Create a modified version with a special ID to track local changes
       const modifiedId = `${updatedTrade.id}_modified`;
-      // Get the original trade to merge with the updates
-      const originalTrade = trades.find((t: Trade) => t.id === updatedTrade.id);
-      
-      if (!originalTrade) {
-        console.error('Cannot update trade: Original trade not found');
-        setLoading(false);
-        return;
-      }
-      
-      // Create a complete Trade object by merging original with updates
       const tradeWithModifiedId: Trade = {
-        ...originalTrade,
         ...updatedTrade,
         id: modifiedId
       };
       
       // Update local state immediately
-      const updatedTrades = trades.map((trade: Trade) => 
+      const updatedTrades = trades.map(trade => 
         trade.id === updatedTrade.id ? tradeWithModifiedId : trade
       );
       
@@ -602,16 +561,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         try {
           console.log(`Updating trade in AWS (attempt ${currentRetry + 1}/${maxRetries})...`);
           
-          // Create a complete Trade object for the API call
-          const completeTradeForAPI: Trade = {
-            ...originalTrade,
+          awsTrade = await updateTrade({
             ...updatedTrade,
-            id: originalTrade.id, // Use the original ID for the update
-            userEmail: user.email || '',
-            userId: ((user.id as string) || (user.uid as string) || '').toString()
-          };
-          
-          awsTrade = await updateTrade(completeTradeForAPI);
+            userEmail: user.email,
+            userId: user.id || user.uid || ''
+          });
           
           if (awsTrade) {
             console.log('Successfully updated trade in AWS:', awsTrade.id);
@@ -628,7 +582,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       
       // If AWS sync was successful, update the local trade with the AWS version
       if (awsSuccess && awsTrade) {
-        const finalUpdatedTrades = updatedTrades.map((trade: Trade) => 
+        const finalUpdatedTrades = updatedTrades.map(trade => 
           trade.id === modifiedId ? awsTrade! : trade
         );
         
@@ -730,7 +684,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     
     try {
       // Find the trade to close
-      const tradeToClose = trades.find((trade: Trade) => trade.id === tradeId);
+      const tradeToClose = trades.find(trade => trade.id === tradeId);
       if (!tradeToClose) {
         console.error('Trade not found for closing:', tradeId);
         return;
@@ -810,7 +764,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Group trades by series if enabled
   const displayTrades = groupBySeries
-    ? filteredTrades.reduce((acc: { [key: string]: Trade[] }, trade: Trade) => {
+    ? filteredTrades.reduce((acc: { [key: string]: Trade[] }, trade) => {
         const key = trade.seriesId || trade.id;
         if (!acc[key]) acc[key] = [];
         acc[key].push(trade);
@@ -861,13 +815,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         <div className="loading">Loading trades...</div>
       ) : (
         <div className="trades-container">
-          {Object.entries(displayTrades as Record<string, Trade[]>).map(([key, groupTrades]) => {
+          {Object.entries(displayTrades).map(([key, groupTrades]) => {
             // Skip empty groups
             if (!Array.isArray(groupTrades) || groupTrades.length === 0) return null;
             
             // For individual display or single-trade series
             if (key === 'individual' || groupTrades.length === 1) {
-              return groupTrades.map((trade: Trade) => (
+              return groupTrades.map((trade) => (
                 <div key={trade.id} className={`trade-card ${trade.status.toLowerCase()}`}>
                   <div className="trade-header">
                     <h3>{trade.tradeType.replace('_', ' ')} - {trade.level}</h3>
@@ -936,7 +890,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                   </div>
                 </div>
                 <div className="series-trades">
-                  {groupTrades.map((trade: Trade) => (
+                  {groupTrades.map((trade) => (
                     <div key={trade.id} className={`series-trade ${trade.status.toLowerCase()}`}>
                       <div className="trade-header">
                         <div>Trade Date: {new Date(trade.tradeDate).toLocaleDateString()}</div>
@@ -992,8 +946,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             <span className="close" onClick={() => setShowAddTrade(false)}>&times;</span>
             <h2>Add New Trade</h2>
             <TradeForm
-              onSave={(trade: Partial<Trade>) => {
-                addTrade(trade as Trade);
+              onSubmit={(trade) => {
+                addTrade(trade);
                 setShowAddTrade(false);
               }}
               onCancel={() => setShowAddTrade(false)}
@@ -1010,8 +964,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             <h2>Edit Trade</h2>
             <TradeForm
               trade={tradeToEdit}
-              onSave={(trade: Partial<Trade>) => {
-                updateTradeHandler(trade as Trade);
+              onSubmit={(trade) => {
+                updateTradeHandler(trade);
                 setTradeToEdit(null);
               }}
               onCancel={() => setTradeToEdit(null)}
@@ -1049,4 +1003,5 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 };
 
 export default TradeLedger;
+
 
