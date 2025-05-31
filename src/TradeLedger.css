@@ -1,12 +1,14 @@
 /* Trade Ledger Styles */
 :root {
-  --primary-color: #6366f1;
-  --primary-dark: #4f46e5;
-  --primary-light: #e0e7ff;
+  --primary-color: #3b82f6;
+  --primary-dark: #2563eb;
+  --primary-light: #dbeafe;
   --secondary-color: #f3f4f6;
   --text-primary: #111827;
   --text-secondary: #6b7280;
   --border-color: #e5e7eb;
+  --profit-color: #10b981;
+  --loss-color: #ef4444;
 }
 
 .trade-ledger-container {
