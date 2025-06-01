@@ -541,5 +541,3 @@ const TradeForm: React.FC<TradeFormProps> = ({
 };
 
 export default TradeForm;
-
-export default TradeForm;
