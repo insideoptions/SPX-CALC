@@ -233,7 +233,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
     if (!user) return;
 
     try {
+      console.log("Adding new trade:", newTrade);
       setSyncStatus("Adding trade...");
+
+      // Create a complete trade object with required fields
+      const completeTradeData = {
+        ...newTrade,
+        userId: user.id || "",
+        userEmail: user.email || "",
+        entryDate: newTrade.entryDate || new Date().toISOString(),
+        status: newTrade.status || "OPEN",
+      };
 
       // Create in AWS if sync is enabled
       if (isAwsSync) {
@@ -250,14 +260,10 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
             );
 
             // Make sure we have all required fields
-            awsTrade = await createTrade({
-              ...newTrade,
-              userId: user.id,
-              userEmail: user.email || "",
-            });
+            awsTrade = await createTrade(completeTradeData);
 
             if (awsTrade) {
-              console.log("Trade created successfully in AWS");
+              console.log("Trade created successfully in AWS:", awsTrade);
               break;
             }
           } catch (err) {
@@ -273,58 +279,53 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
           }
         }
 
-        if (awsTrade) {
-          // Update local state with the AWS response
-          const updatedTrades = assignSeriesToTrades([...trades, awsTrade]);
-          setTrades(updatedTrades);
-
-          // Update local storage
-          localStorage.setItem(
-            `trades_${user.id}`,
-            JSON.stringify(updatedTrades)
-          );
-
-          // Notify parent component if needed
-          if (onTradeUpdate) {
-            onTradeUpdate(updatedTrades);
-          }
-
-          setSyncStatus("Trade added successfully");
-        } else {
-          // If AWS failed after retries, create a local trade with a temporary ID
-          setSyncStatus("AWS sync failed, adding trade locally");
-
-          const localTrade = {
-            ...newTrade,
+        // Create a local trade object if AWS failed
+        const tradeToAdd =
+          awsTrade ||
+          ({
+            ...completeTradeData,
             id: `local_${Date.now()}`,
-            userId: user.id,
-            userEmail: user.email || "",
-          } as Trade;
+          } as Trade);
 
-          const updatedTrades = assignSeriesToTrades([...trades, localTrade]);
-          setTrades(updatedTrades);
+        console.log("Adding trade to local state:", tradeToAdd);
 
-          // Update local storage
-          localStorage.setItem(
-            `trades_${user.id}`,
-            JSON.stringify(updatedTrades)
-          );
+        // Update local state
+        const updatedTrades = assignSeriesToTrades([...trades, tradeToAdd]);
+        setTrades(updatedTrades);
 
-          // Notify parent component if needed
-          if (onTradeUpdate) {
-            onTradeUpdate(updatedTrades);
-          }
+        // Update filtered trades
+        setFilteredTrades(updatedTrades);
+
+        // Update local storage
+        localStorage.setItem(
+          `trades_${user.id}`,
+          JSON.stringify(updatedTrades)
+        );
+
+        // Notify parent component if needed
+        if (onTradeUpdate) {
+          onTradeUpdate(updatedTrades);
         }
+
+        setSyncStatus(
+          awsTrade
+            ? "Trade added successfully"
+            : "AWS sync failed, added trade locally"
+        );
       } else {
         // Local only mode (for testing)
-        const mockId = `local_${Date.now()}`;
         const localTrade = {
-          ...newTrade,
-          id: mockId,
+          ...completeTradeData,
+          id: `local_${Date.now()}`,
         } as Trade;
+
+        console.log("Adding local trade:", localTrade);
 
         const updatedTrades = assignSeriesToTrades([...trades, localTrade]);
         setTrades(updatedTrades);
+
+        // Update filtered trades
+        setFilteredTrades(updatedTrades);
 
         // Update local storage
         localStorage.setItem(
