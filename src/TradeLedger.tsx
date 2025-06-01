@@ -103,7 +103,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   const [spxClosePrice, setSpxClosePrice] = useState<number | undefined>(
     undefined
   );
-  const [isAwsSync, setIsAwsSync] = useState(true);
+  const [isAwsSync, setIsAwsSync] = useState(false); // Set to false by default to ensure local trades work
   const [syncStatus, setSyncStatus] = useState<string>("");
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
@@ -226,7 +226,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
     }
   };
 
-  // Add a new trade
+  // Add a new trade - simplified version to ensure trades are added properly
   const addTrade = async (
     newTrade: Omit<Trade, "id" | "userId" | "userEmail">
   ) => {
@@ -236,109 +236,70 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
       console.log("Adding new trade:", newTrade);
       setSyncStatus("Adding trade...");
 
-      // Create a complete trade object with required fields
-      const completeTradeData = {
+      // Create a local trade with a unique ID
+      const localTrade = {
         ...newTrade,
+        id: `local_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         userId: user.id || "",
         userEmail: user.email || "",
         entryDate: newTrade.entryDate || new Date().toISOString(),
         status: newTrade.status || "OPEN",
-      };
+      } as Trade;
 
-      // Create in AWS if sync is enabled
+      console.log("Created local trade object:", localTrade);
+
+      // Update local state first to ensure UI updates immediately
+      const updatedTrades = assignSeriesToTrades([...trades, localTrade]);
+      console.log("Updated trades array:", updatedTrades);
+
+      // Set both trades and filtered trades
+      setTrades(updatedTrades);
+      setFilteredTrades(updatedTrades);
+
+      // Update local storage
+      localStorage.setItem(`trades_${user.id}`, JSON.stringify(updatedTrades));
+      console.log("Saved to local storage");
+
+      // Notify parent component if needed
+      if (onTradeUpdate) {
+        onTradeUpdate(updatedTrades);
+      }
+
+      setSyncStatus("Trade added locally");
+
+      // If AWS sync is enabled, try to sync in the background
       if (isAwsSync) {
-        // Add retry logic for AWS creates
-        let awsTrade = null;
-        let currentRetry = 0;
+        try {
+          console.log("Attempting to sync with AWS...");
+          const awsTrade = await createTrade({
+            ...newTrade,
+            userId: user.id || "",
+            userEmail: user.email || "",
+          });
 
-        while (currentRetry < maxRetries && !awsTrade) {
-          try {
-            console.log(
-              `Creating trade in AWS (attempt ${
-                currentRetry + 1
-              }/${maxRetries})...`
+          if (awsTrade) {
+            console.log("Trade synced with AWS successfully");
+            setSyncStatus("Trade synced with AWS");
+
+            // Replace the local trade with the AWS one
+            const tradesWithAwsVersion = trades.map((t) =>
+              t.id === localTrade.id ? { ...awsTrade, seriesId: t.seriesId } : t
             );
 
-            // Make sure we have all required fields
-            awsTrade = await createTrade(completeTradeData);
-
-            if (awsTrade) {
-              console.log("Trade created successfully in AWS:", awsTrade);
-              break;
-            }
-          } catch (err) {
-            console.error(`Create attempt ${currentRetry + 1} failed:`, err);
-            currentRetry++;
-
-            if (currentRetry < maxRetries) {
-              // Exponential backoff
-              const backoffTime = Math.pow(2, currentRetry) * 1000;
-              console.log(`Retrying in ${backoffTime}ms...`);
-              await new Promise((resolve) => setTimeout(resolve, backoffTime));
-            }
+            // Update state and storage with AWS version
+            const updatedTradesWithAws =
+              assignSeriesToTrades(tradesWithAwsVersion);
+            setTrades(updatedTradesWithAws);
+            setFilteredTrades(updatedTradesWithAws);
+            localStorage.setItem(
+              `trades_${user.id}`,
+              JSON.stringify(updatedTradesWithAws)
+            );
           }
+        } catch (err) {
+          console.error("Failed to sync trade with AWS:", err);
+          setSyncStatus("Trade added locally (AWS sync failed)");
         }
-
-        // Create a local trade object if AWS failed
-        const tradeToAdd =
-          awsTrade ||
-          ({
-            ...completeTradeData,
-            id: `local_${Date.now()}`,
-          } as Trade);
-
-        console.log("Adding trade to local state:", tradeToAdd);
-
-        // Update local state
-        const updatedTrades = assignSeriesToTrades([...trades, tradeToAdd]);
-        setTrades(updatedTrades);
-
-        // Update filtered trades
-        setFilteredTrades(updatedTrades);
-
-        // Update local storage
-        localStorage.setItem(
-          `trades_${user.id}`,
-          JSON.stringify(updatedTrades)
-        );
-
-        // Notify parent component if needed
-        if (onTradeUpdate) {
-          onTradeUpdate(updatedTrades);
-        }
-
-        setSyncStatus(
-          awsTrade
-            ? "Trade added successfully"
-            : "AWS sync failed, added trade locally"
-        );
-      } else {
-        // Local only mode (for testing)
-        const localTrade = {
-          ...completeTradeData,
-          id: `local_${Date.now()}`,
-        } as Trade;
-
-        console.log("Adding local trade:", localTrade);
-
-        const updatedTrades = assignSeriesToTrades([...trades, localTrade]);
-        setTrades(updatedTrades);
-
-        // Update filtered trades
-        setFilteredTrades(updatedTrades);
-
-        // Update local storage
-        localStorage.setItem(
-          `trades_${user.id}`,
-          JSON.stringify(updatedTrades)
-        );
-
-        // Notify parent component if needed
-        if (onTradeUpdate) {
-          onTradeUpdate(updatedTrades);
-        }
-
-        setSyncStatus("Trade added locally");
       }
     } catch (err) {
       console.error("Error adding trade:", err);
