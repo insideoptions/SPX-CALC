@@ -3,6 +3,7 @@ import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
 import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
 import "./TradeLedger.css";
+import "./TradeLedger.table.css";
 
 // Using global User interface from types.d.ts
 
