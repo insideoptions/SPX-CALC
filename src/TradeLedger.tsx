@@ -84,683 +84,476 @@ const assignSeriesToTrades = (trades: Trade[]): Trade[] => {
 const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const { user } = useAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [showAddTradeModal, setShowAddTradeModal] = useState<boolean>(false);
-  const [tradeToEdit, setTradeToEdit] = useState<Trade | null>(null);
-  const [sortField, setSortField] = useState<string>("date");
+  const [filteredTrades, setFilteredTrades] = useState<Trade[]>([]);
+  const [isAddTradeModalOpen, setIsAddTradeModalOpen] = useState(false);
+  const [isEditTradeModalOpen, setIsEditTradeModalOpen] = useState(false);
+  const [currentTrade, setCurrentTrade] = useState<Trade | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<string>("All Trades");
+  const [sortBy, setSortBy] = useState<string>("Date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [filterStatus, setFilterStatus] = useState<string>("ALL");
-  const [groupBySeries, setGroupBySeries] = useState<boolean>(true);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const syncInProgressRef = useRef<boolean>(false);
+  const [groupBySeries, setGroupBySeries] = useState(true);
+  const [isSpxClosePriceModalOpen, setIsSpxClosePriceModalOpen] =
+    useState(false);
+  const [selectedTradeId, setSelectedTradeId] = useState<string | null>(null);
+  const [spxClosePrice, setSpxClosePrice] = useState<number | undefined>(
+    undefined
+  );
+  const [isAwsSync, setIsAwsSync] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<string>("");
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load trades with robust handling of local and AWS data
-  const loadTrades = async () => {
-    if (!user?.email) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // First load from local storage for immediate display
-      const localStorageKey = `trades_${user.email}`;
-      const storedData = localStorage.getItem(localStorageKey);
-      let localTrades: Trade[] = [];
-
-      if (storedData) {
-        try {
-          localTrades = JSON.parse(storedData);
-
-          // Update state with local trades immediately for fast UI response
-          const tradesWithSeries = assignSeriesToTrades(localTrades);
-          setTrades(tradesWithSeries);
-          if (onTradeUpdate) {
-            onTradeUpdate(tradesWithSeries);
-          }
-        } catch (error) {
-          console.error("Error parsing local trades:", error);
-        }
-      }
-
-      // Then fetch from AWS
-      const awsTrades = await fetchTrades(user.email);
-
-      // Merge AWS trades with local trades, preferring AWS versions
-      const mergedTrades = [...localTrades];
-      let hasChanges = false;
-
-      // Update with AWS trades
-      if (awsTrades && awsTrades.length > 0) {
-        awsTrades.forEach((awsTrade) => {
-          const localIndex = mergedTrades.findIndex(
-            (t) => t.id === awsTrade.id
-          );
-
-          if (localIndex >= 0) {
-            // Trade exists locally, check if it's different
-            if (
-              JSON.stringify(mergedTrades[localIndex]) !==
-              JSON.stringify(awsTrade)
-            ) {
-              mergedTrades[localIndex] = awsTrade;
-              hasChanges = true;
-            }
-          } else {
-            // New trade from AWS, add it
-            mergedTrades.push(awsTrade);
-            hasChanges = true;
-          }
-        });
-      }
-
-      // Update local storage and state if there were changes
-      if (hasChanges) {
-        localStorage.setItem(localStorageKey, JSON.stringify(mergedTrades));
-
-        const tradesWithSeries = assignSeriesToTrades(mergedTrades);
-        setTrades(tradesWithSeries);
-        if (onTradeUpdate) {
-          onTradeUpdate(tradesWithSeries);
-        }
-      }
-    } catch (error) {
-      console.error("Error loading trades:", error);
-
-      // Try local storage as fallback if API fails
-      if (user?.email) {
-        const storedTrades = localStorage.getItem(`trades_${user.email}`);
-        if (storedTrades) {
-          try {
-            const parsedTrades = JSON.parse(storedTrades);
-            const tradesWithSeries = assignSeriesToTrades(parsedTrades);
-            setTrades(tradesWithSeries);
-            if (onTradeUpdate) {
-              onTradeUpdate(tradesWithSeries);
-            }
-          } catch (parseError) {
-            console.error("Error parsing stored trades:", parseError);
-          }
-        }
-      }
-    } finally {
-      setLoading(false);
-      setLastSyncTime(new Date());
-    }
-  };
-
-  // Sync local trades with AWS
-  const syncLocalTradesWithAWS = async () => {
-    if (!user?.email || syncInProgressRef.current) {
-      return;
-    }
-
-    syncInProgressRef.current = true;
-
-    try {
-      // Get trades from local storage
-      const localStorageKey = `trades_${user.email}`;
-      const storedData = localStorage.getItem(localStorageKey);
-
-      if (!storedData) {
-        syncInProgressRef.current = false;
-        return;
-      }
-
-      const localTrades: Trade[] = JSON.parse(storedData);
-
-      // Find local-only trades (those with IDs starting with "local_" or containing "_modified")
-      const localOnlyTrades = localTrades.filter(
-        (trade) =>
-          trade.id.startsWith("local_") || trade.id.includes("_modified")
-      );
-
-      if (localOnlyTrades.length === 0) {
-        syncInProgressRef.current = false;
-        return;
-      }
-
-      // Sync each local trade to AWS with retry logic
-      for (const localTrade of localOnlyTrades) {
-        let awsSuccess = false;
-        let currentRetry = 0;
-        const maxRetries = 3;
-
-        while (currentRetry < maxRetries && !awsSuccess) {
-          try {
-            let awsTrade: Trade | null = null;
-
-            if (localTrade.id.startsWith("local_")) {
-              // This is a new trade that needs to be created in AWS
-              awsTrade = await createTrade({
-                ...localTrade,
-                userEmail: user.email,
-                userId: user.id || (user as any).uid || "",
-              });
-            } else if (localTrade.id.includes("_modified")) {
-              // This is a modified trade that needs to be updated in AWS
-              const originalId = localTrade.id.split("_modified")[0];
-              awsTrade = await updateTrade({
-                ...localTrade,
-                id: originalId, // Use the original ID for the update
-                userEmail: user.email,
-                userId: user.id || (user as any).uid || "",
-              });
-            }
-
-            if (awsTrade) {
-              // Update the local trade with the AWS version
-              const updatedLocalTrades = localTrades.map((trade) =>
-                trade.id === localTrade.id ? awsTrade! : trade
-              );
-
-              // Update local storage and state
-              localStorage.setItem(
-                localStorageKey,
-                JSON.stringify(updatedLocalTrades)
-              );
-
-              const updatedTradesWithSeries =
-                assignSeriesToTrades(updatedLocalTrades);
-              setTrades(updatedTradesWithSeries);
-
-              if (onTradeUpdate) {
-                onTradeUpdate(updatedTradesWithSeries);
-              }
-
-              awsSuccess = true;
-            }
-          } catch (error) {
-            // Exponential backoff for retries
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.pow(2, currentRetry) * 1000)
-            );
-          }
-
-          currentRetry++;
-        }
-      }
-
-      setLastSyncTime(new Date());
-    } catch (error) {
-      console.error("Error in syncLocalTradesWithAWS:", error);
-    } finally {
-      syncInProgressRef.current = false;
-    }
-  };
-
-  // Fetch trades on component mount
+  // Load trades from local storage or API
   useEffect(() => {
-    if (user?.email) {
+    if (user) {
       loadTrades();
     }
   }, [user]);
 
-  // Set up periodic background sync
+  // Apply filters and sorting
   useEffect(() => {
-    if (!user?.email) return;
+    if (trades.length > 0) {
+      let filtered = [...trades];
 
-    // Initial sync after a short delay
-    const initialSyncTimeout = setTimeout(() => {
-      syncLocalTradesWithAWS();
-    }, 5000);
-
-    // Set up interval for periodic sync (every 2 minutes)
-    const syncInterval = setInterval(() => {
-      if (!syncInProgressRef.current && user?.email) {
-        loadTrades();
-
-        // After loading trades, sync any local changes to AWS
-        setTimeout(() => {
-          syncLocalTradesWithAWS();
-        }, 1000);
+      // Apply filter
+      if (filterType !== "All Trades") {
+        filtered = filtered.filter((trade) => trade.status === filterType);
       }
-    }, 120000); // 2 minutes
 
-    // Clean up on unmount
-    return () => {
-      clearTimeout(initialSyncTimeout);
-      clearInterval(syncInterval);
-    };
-  }, [user]);
+      // Apply sorting
+      filtered.sort((a, b) => {
+        let comparison = 0;
 
-  // Save trades to local storage whenever they change
-  useEffect(() => {
-    if (user?.email && trades.length > 0) {
-      localStorage.setItem(`trades_${user.email}`, JSON.stringify(trades));
+        switch (sortBy) {
+          case "Date":
+            comparison =
+              new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
+            break;
+          case "Level":
+            comparison =
+              parseInt(a.level.replace("Level ", "")) -
+              parseInt(b.level.replace("Level ", ""));
+            break;
+          case "P&L":
+            comparison = (a.pnl || 0) - (b.pnl || 0);
+            break;
+          default:
+            comparison = 0;
+        }
+
+        return sortDirection === "asc" ? comparison : -comparison;
+      });
+
+      setFilteredTrades(filtered);
     }
-  }, [trades, user?.email]);
+  }, [trades, filterType, sortBy, sortDirection]);
 
-  // Add a new trade
-  const handleAddTrade = async (newTradePartial: Partial<Trade>) => {
-    if (!user?.email) {
-      return;
-    }
+  // Load trades from local storage or API
+  const loadTrades = async () => {
+    setIsLoading(true);
+    setError(null);
 
     try {
-      setLoading(true);
+      // Try to load from local storage first
+      const localTrades = localStorage.getItem(`trades_${user?.id}`);
 
-      // Generate a local ID for immediate UI update
-      const localId = `local_${Date.now()}_${Math.random()
-        .toString(36)
-        .substring(2, 9)}`;
+      if (localTrades) {
+        const parsedTrades = JSON.parse(localTrades);
+        setTrades(assignSeriesToTrades(parsedTrades));
+      }
 
-      // Create a complete Trade object with required fields
-      const newTrade: Trade = {
-        id: localId,
-        userId: user.id || (user as any).uid || "",
+      // Then try to fetch from API
+      if (isAwsSync) {
+        await syncTrades();
+      }
+    } catch (err) {
+      console.error("Error loading trades:", err);
+      setError("Failed to load trades. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Sync trades with AWS
+  const syncTrades = async () => {
+    if (!user) return;
+
+    try {
+      setSyncStatus("Syncing with AWS...");
+      const awsTrades = await fetchTrades(user.id);
+
+      if (awsTrades) {
+        const tradesWithSeries = assignSeriesToTrades(awsTrades);
+        setTrades(tradesWithSeries);
+
+        // Update local storage
+        localStorage.setItem(`trades_${user.id}`, JSON.stringify(awsTrades));
+
+        // Notify parent component if needed
+        if (onTradeUpdate) {
+          onTradeUpdate(tradesWithSeries);
+        }
+
+        setSyncStatus("Sync complete");
+        setRetryCount(0);
+      }
+    } catch (err) {
+      console.error("Error syncing with AWS:", err);
+      setSyncStatus("Sync failed");
+
+      // Retry logic
+      if (retryCount < maxRetries) {
+        setSyncStatus(`Retrying (${retryCount + 1}/${maxRetries})...`);
+        setRetryCount((prev) => prev + 1);
+
+        if (retryTimeoutRef.current) {
+          clearTimeout(retryTimeoutRef.current);
+        }
+
+        retryTimeoutRef.current = setTimeout(() => {
+          syncTrades();
+        }, 2000 * (retryCount + 1)); // Exponential backoff
+      } else {
+        setSyncStatus("Sync failed after retries");
+        setError("Failed to sync with AWS. Using local data.");
+      }
+    }
+  };
+
+  // Add a new trade
+  const addTrade = async (
+    trade: Omit<Trade, "id" | "userId" | "userEmail">
+  ) => {
+    if (!user) return;
+
+    try {
+      setSyncStatus("Adding trade...");
+
+      // Create new trade object
+      const newTrade = {
+        ...trade,
+        userId: user.id,
         userEmail: user.email,
-        tradeDate:
-          newTradePartial.tradeDate || new Date().toISOString().split("T")[0],
-        entryDate:
-          newTradePartial.entryDate || new Date().toISOString().split("T")[0],
-        level: newTradePartial.level || "2",
-        contractQuantity: newTradePartial.contractQuantity || 1,
-        entryPremium: newTradePartial.entryPremium || 0,
-        tradeType: newTradePartial.tradeType || "IRON_CONDOR",
-        strikes: newTradePartial.strikes || {
-          sellPut: 0,
-          buyPut: 0,
-          sellCall: 0,
-          buyCall: 0,
-        },
-        status: newTradePartial.status || "OPEN",
-        fees: newTradePartial.fees || 0,
-        isAutoPopulated: newTradePartial.isAutoPopulated || false,
-        matrix: newTradePartial.matrix || "",
-        buyingPower: newTradePartial.buyingPower || "",
-        pnl: newTradePartial.pnl,
-        exitDate: newTradePartial.exitDate,
-        exitPremium: newTradePartial.exitPremium,
-        notes: newTradePartial.notes,
-        spxClosePrice: newTradePartial.spxClosePrice,
-        isMaxProfit: newTradePartial.isMaxProfit,
-        seriesId: newTradePartial.seriesId,
       };
 
-      // Update local state immediately for responsive UI
-      const updatedTrades = [...trades, newTrade];
-      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
-      setTrades(updatedTradesWithSeries);
+      // Add to AWS if sync is enabled
+      if (isAwsSync) {
+        const createdTrade = await createTrade(newTrade);
 
-      // Update local storage
-      if (user.email) {
+        if (createdTrade) {
+          // Update local state
+          const updatedTrades = assignSeriesToTrades([...trades, createdTrade]);
+          setTrades(updatedTrades);
+
+          // Update local storage
+          localStorage.setItem(
+            `trades_${user.id}`,
+            JSON.stringify(updatedTrades)
+          );
+
+          // Notify parent component if needed
+          if (onTradeUpdate) {
+            onTradeUpdate(updatedTrades);
+          }
+
+          setSyncStatus("Trade added successfully");
+        }
+      } else {
+        // Local only mode (for testing)
+        const mockId = `local_${Date.now()}`;
+        const localTrade = {
+          ...newTrade,
+          id: mockId,
+        } as Trade;
+
+        const updatedTrades = assignSeriesToTrades([...trades, localTrade]);
+        setTrades(updatedTrades);
+
+        // Update local storage
         localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
+          `trades_${user.id}`,
+          JSON.stringify(updatedTrades)
         );
-      }
 
-      // Notify parent if callback exists
-      if (onTradeUpdate) {
-        onTradeUpdate(updatedTradesWithSeries);
-      }
+        // Notify parent component if needed
+        if (onTradeUpdate) {
+          onTradeUpdate(updatedTrades);
+        }
 
-      // Sync to AWS in the background
-      setTimeout(() => {
-        syncLocalTradesWithAWS();
-      }, 500);
-    } catch (error) {
-      console.error("Error adding trade:", error);
-    } finally {
-      setLoading(false);
-      setShowAddTradeModal(false);
+        setSyncStatus("Trade added locally");
+      }
+    } catch (err) {
+      console.error("Error adding trade:", err);
+      setSyncStatus("Failed to add trade");
+      setError("Failed to add trade. Please try again.");
     }
   };
 
   // Update an existing trade
-  const handleUpdateTrade = async (updatedTradePartial: Partial<Trade>) => {
-    if (!user?.email || !tradeToEdit) {
-      return;
-    }
+  const updateTradeHandler = async (updatedTrade: Trade) => {
+    if (!user) return;
 
     try {
-      setLoading(true);
+      setSyncStatus("Updating trade...");
 
-      // Create a complete updated trade by merging the partial update with the existing trade
-      const updatedTrade: Trade = {
-        ...tradeToEdit,
-        ...updatedTradePartial,
-        // Ensure required fields are present
-        id: tradeToEdit.id,
-        userId: tradeToEdit.userId,
-        userEmail: tradeToEdit.userEmail,
-      };
+      // Update in AWS if sync is enabled
+      if (isAwsSync) {
+        const result = await updateTrade(updatedTrade);
 
-      // Create a modified version with a temporary ID for local storage
-      const modifiedId = `${updatedTrade.id}_modified_${Date.now()}`;
-      const modifiedTrade: Trade = {
-        ...updatedTrade,
-        id: modifiedId,
-      };
+        if (result) {
+          // Update local state
+          const updatedTrades = trades.map((t) =>
+            t.id === updatedTrade.id ? updatedTrade : t
+          );
+          const tradesWithSeries = assignSeriesToTrades(updatedTrades);
+          setTrades(tradesWithSeries);
 
-      // Update local state immediately
-      const updatedTrades = trades.map((trade) =>
-        trade.id === tradeToEdit.id ? modifiedTrade : trade
-      );
-      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
-      setTrades(updatedTradesWithSeries);
+          // Update local storage
+          localStorage.setItem(
+            `trades_${user.id}`,
+            JSON.stringify(updatedTrades)
+          );
 
-      // Update local storage
-      if (user.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
+          // Notify parent component if needed
+          if (onTradeUpdate) {
+            onTradeUpdate(tradesWithSeries);
+          }
+
+          setSyncStatus("Trade updated successfully");
+        }
+      } else {
+        // Local only mode (for testing)
+        const updatedTrades = trades.map((t) =>
+          t.id === updatedTrade.id ? updatedTrade : t
         );
-      }
+        const tradesWithSeries = assignSeriesToTrades(updatedTrades);
+        setTrades(tradesWithSeries);
 
-      // Notify parent if callback exists
-      if (onTradeUpdate) {
-        onTradeUpdate(updatedTradesWithSeries);
-      }
+        // Update local storage
+        localStorage.setItem(
+          `trades_${user.id}`,
+          JSON.stringify(updatedTrades)
+        );
 
-      // Sync to AWS in the background
-      setTimeout(() => {
-        syncLocalTradesWithAWS();
-      }, 500);
-    } catch (error) {
-      console.error("Error updating trade:", error);
-    } finally {
-      setLoading(false);
-      setTradeToEdit(null);
+        // Notify parent component if needed
+        if (onTradeUpdate) {
+          onTradeUpdate(tradesWithSeries);
+        }
+
+        setSyncStatus("Trade updated locally");
+      }
+    } catch (err) {
+      console.error("Error updating trade:", err);
+      setSyncStatus("Failed to update trade");
+      setError("Failed to update trade. Please try again.");
     }
   };
 
   // Delete a trade
-  const handleDeleteTrade = async (tradeId: string) => {
-    if (!user?.email) {
-      return;
-    }
+  const deleteTradeHandler = async (tradeId: string) => {
+    if (!user) return;
 
     try {
-      setLoading(true);
+      setSyncStatus("Deleting trade...");
 
-      // Update local state immediately
-      const updatedTrades = trades.filter((trade) => trade.id !== tradeId);
-      const updatedTradesWithSeries = assignSeriesToTrades(updatedTrades);
-      setTrades(updatedTradesWithSeries);
+      // Delete from AWS if sync is enabled
+      if (isAwsSync) {
+        const result = await deleteTrade(tradeId);
 
-      // Update local storage
-      if (user.email) {
-        localStorage.setItem(
-          `trades_${user.email}`,
-          JSON.stringify(updatedTradesWithSeries)
-        );
-      }
+        if (result) {
+          // Update local state
+          const updatedTrades = trades.filter((t) => t.id !== tradeId);
+          const tradesWithSeries = assignSeriesToTrades(updatedTrades);
+          setTrades(tradesWithSeries);
 
-      // Notify parent if callback exists
-      if (onTradeUpdate) {
-        onTradeUpdate(updatedTradesWithSeries);
-      }
+          // Update local storage
+          localStorage.setItem(
+            `trades_${user.id}`,
+            JSON.stringify(updatedTrades)
+          );
 
-      // Delete from AWS
-      await deleteTrade(tradeId);
-    } catch (error) {
-      console.error("Error deleting trade:", error);
-      // Reload trades if delete failed to restore the deleted trade
-      loadTrades();
-    } finally {
-      setLoading(false);
-    }
-  };
+          // Notify parent component if needed
+          if (onTradeUpdate) {
+            onTradeUpdate(tradesWithSeries);
+          }
 
-  // Filter trades based on selected status
-  const getFilteredTrades = () => {
-    if (filterStatus === "ALL") {
-      return trades;
-    }
-    return trades.filter((trade) => trade.status === filterStatus);
-  };
-
-  // Sort trades based on selected field and direction
-  const getSortedTrades = (filteredTrades: Trade[]) => {
-    return [...filteredTrades].sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortField) {
-        case "date":
-          comparison =
-            new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
-          break;
-        case "level":
-          comparison = parseInt(a.level) - parseInt(b.level);
-          break;
-        case "pnl":
-          comparison = (a.pnl || 0) - (b.pnl || 0);
-          break;
-        default:
-          comparison = 0;
-      }
-
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-  };
-
-  // Group trades by series if enabled
-  const getGroupedTrades = (sortedTrades: Trade[]) => {
-    if (!groupBySeries) {
-      return sortedTrades;
-    }
-
-    // Group trades by seriesId
-    const seriesGroups: { [key: string]: Trade[] } = {};
-
-    sortedTrades.forEach((trade) => {
-      if (trade.seriesId) {
-        if (!seriesGroups[trade.seriesId]) {
-          seriesGroups[trade.seriesId] = [];
+          setSyncStatus("Trade deleted successfully");
         }
-        seriesGroups[trade.seriesId].push(trade);
+      } else {
+        // Local only mode (for testing)
+        const updatedTrades = trades.filter((t) => t.id !== tradeId);
+        const tradesWithSeries = assignSeriesToTrades(updatedTrades);
+        setTrades(tradesWithSeries);
+
+        // Update local storage
+        localStorage.setItem(
+          `trades_${user.id}`,
+          JSON.stringify(updatedTrades)
+        );
+
+        // Notify parent component if needed
+        if (onTradeUpdate) {
+          onTradeUpdate(tradesWithSeries);
+        }
+
+        setSyncStatus("Trade deleted locally");
       }
-    });
+    } catch (err) {
+      console.error("Error deleting trade:", err);
+      setSyncStatus("Failed to delete trade");
+      setError("Failed to delete trade. Please try again.");
+    }
+  };
 
-    // Get trades without series
-    const tradesWithoutSeries = sortedTrades.filter((trade) => !trade.seriesId);
+  // Update SPX close price for a trade
+  const updateSpxClosePrice = async () => {
+    if (!selectedTradeId || spxClosePrice === undefined) return;
 
-    // Flatten the grouped trades
-    const groupedTrades: Trade[] = [];
+    try {
+      const tradeToUpdate = trades.find((t) => t.id === selectedTradeId);
 
-    Object.values(seriesGroups).forEach((seriesTrades) => {
-      groupedTrades.push(...seriesTrades);
-    });
+      if (tradeToUpdate) {
+        const updatedTrade = {
+          ...tradeToUpdate,
+          spxClosePrice,
+          status: "CLOSED" as const,
+        };
 
-    // Add the trades without series
-    groupedTrades.push(...tradesWithoutSeries);
-
-    return groupedTrades;
+        await updateTradeHandler(updatedTrade);
+        setIsSpxClosePriceModalOpen(false);
+        setSelectedTradeId(null);
+        setSpxClosePrice(undefined);
+      }
+    } catch (err) {
+      console.error("Error updating SPX close price:", err);
+      setError("Failed to update SPX close price. Please try again.");
+    }
   };
 
   // Calculate statistics
-  const calculateStats = (filteredTrades: Trade[]) => {
-    const totalPnl = filteredTrades.reduce(
-      (sum, trade) => sum + (trade.pnl || 0),
-      0
-    );
-    const closedTrades = filteredTrades.filter(
-      (trade) => trade.status === "CLOSED"
-    );
-    const winningTrades = closedTrades.filter((trade) => (trade.pnl || 0) > 0);
-    const winRate =
-      closedTrades.length > 0
-        ? (winningTrades.length / closedTrades.length) * 100
-        : 0;
+  const calculateStats = () => {
+    const totalTrades = trades.length;
+    let totalPnl = 0;
+    let winningTrades = 0;
+
+    trades.forEach((trade) => {
+      if (trade.pnl) {
+        totalPnl += trade.pnl;
+        if (trade.pnl > 0) {
+          winningTrades++;
+        }
+      }
+    });
+
+    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
     return {
       totalPnl,
       winRate,
-      totalTrades: filteredTrades.length,
-      winningTrades: winningTrades.length,
+      totalTrades,
+      winningTrades,
     };
   };
 
-  // Prepare trades for display
-  const filteredTrades = getFilteredTrades();
-  const sortedTrades = getSortedTrades(filteredTrades);
-  const displayTrades = getGroupedTrades(sortedTrades);
-  const stats = calculateStats(filteredTrades);
+  // Define types for grouped trades display
+  type SeriesItem = {
+    type: "series";
+    seriesId: string;
+    trades: Trade[];
+    pnl: number;
+  };
+
+  type TradeItem = {
+    type: "trade";
+    trade: Trade;
+  };
+
+  type DisplayItem = SeriesItem | TradeItem;
+
+  // Group trades by series for display
+  const getGroupedTrades = (): DisplayItem[] => {
+    if (!groupBySeries) {
+      return filteredTrades.map((trade) => ({ type: "trade" as const, trade }));
+    }
+
+    const seriesMap = new Map<string, Trade[]>();
+    const singleTrades: Trade[] = [];
+
+    // Group trades by series
+    filteredTrades.forEach((trade) => {
+      if (trade.seriesId) {
+        if (!seriesMap.has(trade.seriesId)) {
+          seriesMap.set(trade.seriesId, []);
+        }
+        seriesMap.get(trade.seriesId)?.push(trade);
+      } else {
+        singleTrades.push(trade);
+      }
+    });
+
+    // Create display items
+    const displayItems: DisplayItem[] = [];
+
+    // Add series groups
+    seriesMap.forEach((seriesTrades, seriesId) => {
+      // Calculate total P&L for the series
+      const seriesPnl = seriesTrades.reduce(
+        (sum, trade) => sum + (trade.pnl || 0),
+        0
+      );
+
+      // Add series header
+      displayItems.push({
+        type: "series" as const,
+        seriesId,
+        trades: seriesTrades,
+        pnl: seriesPnl,
+      });
+
+      // Add individual trades in the series
+      seriesTrades.forEach((trade) => {
+        displayItems.push({ type: "trade" as const, trade });
+      });
+    });
+
+    // Add single trades (not in any series)
+    singleTrades.forEach((trade) => {
+      displayItems.push({
+        type: "series" as const,
+        seriesId: `single_${trade.id}`,
+        trades: [trade],
+        pnl: trade.pnl || 0,
+      });
+      displayItems.push({ type: "trade" as const, trade });
+    });
+
+    return displayItems;
+  };
 
   // Format currency
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
+      style: "decimal",
       minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
   };
 
-  // Toggle sort direction
-  const handleSortChange = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
-    }
-  };
-
-  // Render series headers and calculate series totals
-  const renderSeriesHeader = (seriesId: string, trades: Trade[]) => {
-    const seriesPnl = trades.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
-    const seriesCount = trades.length;
-
-    return (
-      <tr className="series-header">
-        <td colSpan={9}>{seriesCount} Trade Series</td>
-        <td
-          className={`series-pnl ${seriesPnl >= 0 ? "positive" : "negative"}`}
-        >
-          {formatCurrency(seriesPnl)}
-        </td>
-        <td></td>
-      </tr>
-    );
-  };
-
-  // Render trade rows with series grouping
-  const renderTradeRows = () => {
-    if (!displayTrades.length) {
-      return (
-        <tr>
-          <td colSpan={11} style={{ textAlign: "center", padding: "20px" }}>
-            No trades found
-          </td>
-        </tr>
-      );
-    }
-
-    const rows: JSX.Element[] = [];
-    let currentSeriesId: string | null = null;
-    let currentSeriesTrades: Trade[] = [];
-
-    displayTrades.forEach((trade, index) => {
-      // Handle series headers
-      if (groupBySeries && trade.seriesId) {
-        if (currentSeriesId !== trade.seriesId) {
-          // If we have collected trades for a previous series, render its header
-          if (currentSeriesId && currentSeriesTrades.length > 0) {
-            rows.push(
-              <React.Fragment key={`series-${currentSeriesId}`}>
-                {renderSeriesHeader(currentSeriesId, currentSeriesTrades)}
-              </React.Fragment>
-            );
-          }
-
-          // Start a new series
-          currentSeriesId = trade.seriesId;
-          currentSeriesTrades = [trade];
-        } else {
-          // Add to current series
-          currentSeriesTrades.push(trade);
-        }
-      }
-
-      // Render the trade row
-      rows.push(
-        <tr key={trade.id}>
-          <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
-          <td>
-            <span className={`level-badge level-${trade.level}`}>
-              Level {trade.level}
-            </span>
-          </td>
-          <td>{trade.tradeType.replace("_", " ")}</td>
-          <td>{trade.contractQuantity}</td>
-          <td>{trade.strikes.sellPut}</td>
-          <td>{trade.strikes.sellCall}</td>
-          <td>{trade.entryPremium.toFixed(2)}</td>
-          <td>{trade.exitPremium?.toFixed(2) || "0.00"}</td>
-          <td>
-            {trade.spxClosePrice ? (
-              <span
-                className={`spx-close ${
-                  trade.spxClosePrice > trade.strikes.sellCall
-                    ? "above"
-                    : "below"
-                }`}
-              >
-                {trade.spxClosePrice}
-              </span>
-            ) : (
-              "-"
-            )}
-          </td>
-          <td>
-            <span
-              className={`status-badge status-${trade.status.toLowerCase()}`}
-            >
-              {trade.status}
-            </span>
-          </td>
-          <td
-            className={`pnl ${(trade.pnl || 0) >= 0 ? "positive" : "negative"}`}
-          >
-            {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-          </td>
-          <td>
-            <div className="action-buttons">
-              <button
-                className="edit-button"
-                onClick={() => setTradeToEdit(trade)}
-              >
-                Edit
-              </button>
-              <button
-                className="delete-button"
-                onClick={() => handleDeleteTrade(trade.id)}
-              >
-                Delete
-              </button>
-            </div>
-          </td>
-        </tr>
-      );
-
-      // If this is the last trade and we have a current series, render its header
-      if (
-        index === displayTrades.length - 1 &&
-        groupBySeries &&
-        currentSeriesId &&
-        currentSeriesTrades.length > 0
-      ) {
-        rows.unshift(
-          <React.Fragment key={`series-${currentSeriesId}`}>
-            {renderSeriesHeader(currentSeriesId, currentSeriesTrades)}
-          </React.Fragment>
-        );
-      }
-    });
-
-    return rows;
-  };
+  // Render the component
+  const stats = calculateStats();
+  const groupedTrades = getGroupedTrades();
 
   return (
     <div className="trade-ledger-container">
+      {/* Header */}
       <div className="trade-ledger-header">
         <h1 className="trade-ledger-title">Trade Ledger</h1>
         <button
           className="add-trade-button"
-          onClick={() => setShowAddTradeModal(true)}
+          onClick={() => setIsAddTradeModalOpen(true)}
         >
           + Add Trade
         </button>
@@ -775,17 +568,20 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               stats.totalPnl >= 0 ? "positive" : "negative"
             }`}
           >
-            {formatCurrency(stats.totalPnl)}
+            ${formatCurrency(stats.totalPnl)}
           </div>
         </div>
+
         <div className="stat-card">
           <div className="stat-label">Win Rate</div>
           <div className="stat-value">{stats.winRate.toFixed(1)}%</div>
         </div>
+
         <div className="stat-card">
           <div className="stat-label">Total Trades</div>
           <div className="stat-value">{stats.totalTrades}</div>
         </div>
+
         <div className="stat-card">
           <div className="stat-label">Winning Trades</div>
           <div className="stat-value">{stats.winningTrades}</div>
@@ -795,29 +591,32 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {/* Filter Controls */}
       <div className="filter-controls">
         <div>
-          <span>Filter: </span>
+          <label htmlFor="filter-dropdown">Filter: </label>
           <select
+            id="filter-dropdown"
             className="filter-dropdown"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
           >
-            <option value="ALL">All Trades</option>
+            <option value="All Trades">All Trades</option>
             <option value="OPEN">Open</option>
             <option value="CLOSED">Closed</option>
-            <option value="EXPIRED">Expired</option>
           </select>
         </div>
+
         <div className="sort-controls">
-          <span>Sort by: </span>
+          <label htmlFor="sort-dropdown">Sort by: </label>
           <select
+            id="sort-dropdown"
             className="filter-dropdown"
-            value={sortField}
-            onChange={(e) => handleSortChange(e.target.value)}
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
           >
-            <option value="date">Date</option>
-            <option value="level">Level</option>
-            <option value="pnl">P&L</option>
+            <option value="Date">Date</option>
+            <option value="Level">Level</option>
+            <option value="P&L">P&L</option>
           </select>
+
           <span
             className="sort-direction"
             onClick={() =>
@@ -827,6 +626,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             {sortDirection === "asc" ? "↑" : "↓"}
           </span>
         </div>
+
         <div className="group-checkbox">
           <input
             type="checkbox"
@@ -838,70 +638,218 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </div>
       </div>
 
-      {/* Trade Table */}
-      <table className="trade-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Level</th>
-            <th>Type</th>
-            <th>Contracts</th>
-            <th>Sell Put</th>
-            <th>Sell Call</th>
-            <th>Entry</th>
-            <th>Exit</th>
-            <th>SPX Close</th>
-            <th>Status</th>
-            <th>P&L</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
+      {/* Trades Table */}
+      {isLoading ? (
+        <div>Loading trades...</div>
+      ) : error ? (
+        <div>{error}</div>
+      ) : filteredTrades.length === 0 ? (
+        <div>No trades found. Add your first trade!</div>
+      ) : (
+        <table className="trade-table">
+          <thead>
             <tr>
-              <td colSpan={11} style={{ textAlign: "center", padding: "20px" }}>
-                Loading trades...
-              </td>
+              <th>Date</th>
+              <th>Level</th>
+              <th>Type</th>
+              <th>Contracts</th>
+              <th>Sell Put</th>
+              <th>Sell Call</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>SPX Close</th>
+              <th>Status</th>
+              <th>P&L</th>
+              <th>Actions</th>
             </tr>
-          ) : (
-            renderTradeRows()
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {groupedTrades.map((item, index) => {
+              if (
+                item.type === "series" &&
+                item.trades &&
+                item.trades.length > 0
+              ) {
+                // Series header row
+                return (
+                  <tr key={`series-${item.seriesId}`} className="series-header">
+                    <td colSpan={10}>
+                      {item.trades.length > 1
+                        ? `${item.trades.length} Trade Series`
+                        : `1 Trade Series`}
+                    </td>
+                    <td
+                      className={`series-pnl ${
+                        item.pnl && item.pnl >= 0 ? "positive" : "negative"
+                      }`}
+                    >
+                      {item.pnl ? formatCurrency(item.pnl) : "0.00"}
+                    </td>
+                    <td></td>
+                  </tr>
+                );
+              } else if (item.type === "trade" && item.trade) {
+                // Trade row
+                const trade = item.trade;
+                return (
+                  <tr key={`trade-${trade.id}`}>
+                    <td>{new Date(trade.tradeDate).toLocaleDateString()}</td>
+                    <td>
+                      <span
+                        className={`level-badge level-${trade.level.replace(
+                          "Level ",
+                          ""
+                        )}`}
+                      >
+                        {trade.level}
+                      </span>
+                    </td>
+                    <td>{trade.tradeType.replace("_", " ")}</td>
+                    <td>{trade.contractQuantity}</td>
+                    <td>{trade.strikes.sellPut}</td>
+                    <td>{trade.strikes.sellCall}</td>
+                    <td>{trade.entryPremium.toFixed(2)}</td>
+                    <td>
+                      {trade.exitPremium !== undefined
+                        ? trade.exitPremium.toFixed(2)
+                        : "0.00"}
+                    </td>
+                    <td>
+                      {trade.spxClosePrice ? (
+                        <span
+                          className={`spx-close ${
+                            trade.spxClosePrice > trade.strikes.sellCall
+                              ? "above"
+                              : trade.spxClosePrice < trade.strikes.sellPut
+                              ? "below"
+                              : ""
+                          }`}
+                        >
+                          {trade.spxClosePrice}
+                        </span>
+                      ) : (
+                        "-"
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`status-badge status-${trade.status.toLowerCase()}`}
+                      >
+                        {trade.status}
+                      </span>
+                    </td>
+                    <td
+                      className={`pnl ${
+                        trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
+                      }`}
+                    >
+                      {trade.pnl ? formatCurrency(trade.pnl) : "0.00"}
+                    </td>
+                    <td className="action-buttons">
+                      <button
+                        className="edit-button"
+                        onClick={() => {
+                          setCurrentTrade(trade);
+                          setIsEditTradeModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="delete-button"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Are you sure you want to delete this trade?"
+                            )
+                          ) {
+                            deleteTradeHandler(trade.id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              }
+              return null;
+            })}
+          </tbody>
+        </table>
+      )}
 
       {/* Add Trade Modal */}
-      {showAddTradeModal && (
+      {isAddTradeModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
             <h2>Add New Trade</h2>
             <TradeForm
-              onSave={handleAddTrade}
-              onCancel={() => setShowAddTradeModal(false)}
+              onSave={(tradeData: Partial<Trade>) => {
+                addTrade(
+                  tradeData as Omit<Trade, "id" | "userId" | "userEmail">
+                );
+                setIsAddTradeModalOpen(false);
+              }}
+              onCancel={() => setIsAddTradeModalOpen(false)}
             />
           </div>
         </div>
       )}
 
       {/* Edit Trade Modal */}
-      {tradeToEdit && (
+      {isEditTradeModalOpen && currentTrade && (
         <div className="modal-overlay">
           <div className="modal-content">
             <h2>Edit Trade</h2>
             <TradeForm
-              trade={tradeToEdit}
-              onSave={handleUpdateTrade}
-              onCancel={() => setTradeToEdit(null)}
+              trade={currentTrade}
+              onSave={(tradeData: Partial<Trade>) => {
+                updateTradeHandler({ ...currentTrade, ...tradeData });
+                setIsEditTradeModalOpen(false);
+                setCurrentTrade(null);
+              }}
+              onCancel={() => {
+                setIsEditTradeModalOpen(false);
+                setCurrentTrade(null);
+              }}
             />
           </div>
         </div>
       )}
 
-      {/* Sync Status Indicator */}
-      {lastSyncTime && (
-        <div className="sync-status">
-          Last synced: {lastSyncTime.toLocaleTimeString()}
+      {/* SPX Close Price Modal */}
+      {isSpxClosePriceModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2>Enter SPX Close Price</h2>
+            <div className="form-group">
+              <label>SPX Close Price:</label>
+              <input
+                type="number"
+                value={spxClosePrice || ""}
+                onChange={(e) => setSpxClosePrice(parseFloat(e.target.value))}
+                step="0.01"
+              />
+            </div>
+            <div className="form-actions">
+              <button onClick={updateSpxClosePrice}>Save</button>
+              <button
+                onClick={() => {
+                  setIsSpxClosePriceModalOpen(false);
+                  setSelectedTradeId(null);
+                  setSpxClosePrice(undefined);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* Sync Status */}
+      {syncStatus && <div className="sync-status">{syncStatus}</div>}
     </div>
   );
 };
