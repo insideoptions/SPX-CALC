@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useAuth } from "./GoogleAuthContext";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import TradeForm from "./TradeForm";
+import { useAuth } from "./GoogleAuthContext";
 import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
 import "./TradeLedger.css";
 
@@ -90,6 +90,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
   const [filteredTrades, setFilteredTrades] = useState<Trade[]>([]);
   const [isAddTradeModalOpen, setIsAddTradeModalOpen] = useState(false);
   const [isEditTradeModalOpen, setIsEditTradeModalOpen] = useState(false);
+  const [isCloseTradeModalOpen, setIsCloseTradeModalOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<Trade | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -840,6 +841,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
                         >
                           Edit
                         </button>
+                        {trade.status === "OPEN" && (
+                          <button
+                            className="close-button"
+                            onClick={() => {
+                              setCurrentTrade(trade);
+                              setIsCloseTradeModalOpen(true);
+                            }}
+                          >
+                            Close
+                          </button>
+                        )}
                         <button
                           className="delete-button"
                           onClick={() => {
@@ -897,6 +909,28 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({
               }}
               onCancel={() => {
                 setIsEditTradeModalOpen(false);
+                setCurrentTrade(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Close Trade Modal */}
+      {isCloseTradeModalOpen && currentTrade && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2>Close Trade</h2>
+            <TradeForm
+              trade={currentTrade}
+              isClosing={true}
+              onSave={(tradeData: Partial<Trade>) => {
+                updateTradeHandler({ ...currentTrade, ...tradeData });
+                setIsCloseTradeModalOpen(false);
+                setCurrentTrade(null);
+              }}
+              onCancel={() => {
+                setIsCloseTradeModalOpen(false);
                 setCurrentTrade(null);
               }}
             />
