@@ -229,6 +229,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   // Handle save trade
   const handleSaveTrade = async (tradeData: Partial<Trade>) => {
     try {
+      console.log("handleSaveTrade called with:", tradeData);
       setIsLoading(true);
       setError(null);
 
