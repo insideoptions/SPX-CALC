@@ -1,567 +1,432 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import { Trade } from "./TradeLedger";
 import { useAuth } from "./GoogleAuthContext";
-import TradeForm from "./TradeForm";
-import { fetchTrades, createTrade, updateTrade, deleteTrade } from "./api";
-import "./TradeLedger.css";
+import "./TradeForm.css";
 
-// Trade interface
-export interface Trade {
-  id: string;
-  userId: string;
-  userEmail: string;
-  tradeDate: string;
-  entryDate: string;
-  exitDate?: string;
-  level: string;
-  contractQuantity: number;
-  entryPremium: number;
-  exitPremium?: number;
-  tradeType: "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD";
-  strikes: {
-    sellPut: number;
-    buyPut: number;
-    sellCall: number;
-    buyCall: number;
-  };
-  status: "OPEN" | "CLOSED" | "EXPIRED";
-  pnl?: number;
-  fees: number;
-  notes?: string;
-  isAutoPopulated: boolean;
-  matrix: string;
-  buyingPower: string;
-  spxClosePrice?: number;
-  isMaxProfit?: boolean;
-  seriesId?: string;
+interface TradeFormProps {
+  trade?: Trade | null;
+  onSave: (trade: Partial<Trade>) => void;
+  onCancel: () => void;
+  isClosing?: boolean;
 }
 
-interface TradeLedgerProps {
-  onTradeUpdate?: (trades: Trade[]) => void;
-}
-
-const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
+const TradeForm: React.FC<TradeFormProps> = ({
+  trade,
+  onSave,
+  onCancel,
+  isClosing = false,
+}) => {
   const { user } = useAuth();
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [isAddTradeModalOpen, setIsAddTradeModalOpen] = useState(false);
-  const [isEditTradeModalOpen, setIsEditTradeModalOpen] = useState(false);
-  const [currentTrade, setCurrentTrade] = useState<Trade | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<string>("All Trades");
-  const [sortBy, setSortBy] = useState<string>("Date");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [groupBySeries, setGroupBySeries] = useState(true);
-  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
-  // Mock data for demonstration
+  // Form state
+  const [formData, setFormData] = useState({
+    tradeDate: new Date().toISOString().split("T")[0],
+    level: "Level 3",
+    matrix: "Standard Matrix",
+    buyingPower: "$26,350",
+    tradeType: "IRON_CONDOR",
+    contractQuantity: 1,
+    entryPremium: 0,
+    exitPremium: 0,
+    fees: 0,
+    sellPut: 0,
+    buyPut: 0,
+    sellCall: 0,
+    buyCall: 0,
+    notes: "",
+    spxClosePrice: 0,
+  });
+
+  // Initialize form data from trade if provided
   useEffect(() => {
-    // Mock trades data
-    const mockTrades: Trade[] = [
-      {
-        id: "1",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-14",
-        entryDate: "2025-05-14",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.85,
-        exitPremium: 5.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5505,
-          buyPut: 5500,
-          sellCall: 5655,
-          buyCall: 5660,
-        },
-        status: "CLOSED",
-        pnl: -321.56,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5400,
-        seriesId: "series_1",
-      },
-      {
-        id: "2",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-15",
-        entryDate: "2025-05-15",
-        level: "Level 3",
-        contractQuantity: 5,
-        entryPremium: 1.95,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5775,
-          buyPut: 5770,
-          sellCall: 5855,
-          buyCall: 5860,
-        },
-        status: "CLOSED",
-        pnl: 968.44,
-        fees: 32.8,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5825,
-        isMaxProfit: true,
-        seriesId: "series_1",
-      },
-      {
-        id: "3",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-21",
-        entryDate: "2025-05-21",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.85,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 6000,
-          buyCall: 6005,
-        },
-        status: "CLOSED",
-        pnl: 178.44,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5905,
-        isMaxProfit: true,
-      },
-      {
-        id: "4",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-28",
-        entryDate: "2025-05-28",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 2.0,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 5955,
-          buyCall: 5960,
-        },
-        status: "CLOSED",
-        pnl: 193.44,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5889,
-        isMaxProfit: true,
-      },
-      {
-        id: "5",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-30",
-        entryDate: "2025-05-30",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.95,
-        exitPremium: 5.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 5955,
-          buyCall: 5960,
-        },
-        status: "CLOSED",
-        pnl: -314.56,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5960,
-      },
-    ];
+    if (trade) {
+      setFormData({
+        tradeDate: trade.tradeDate || new Date().toISOString().split("T")[0],
+        level: trade.level || "Level 3",
+        matrix: trade.matrix || "Standard Matrix",
+        buyingPower: trade.buyingPower || "$26,350",
+        tradeType: trade.tradeType || "IRON_CONDOR",
+        contractQuantity: trade.contractQuantity || 1,
+        entryPremium: trade.entryPremium || 0,
+        exitPremium: trade.exitPremium || 0,
+        fees: trade.fees || 0,
+        sellPut: trade.strikes?.sellPut || 0,
+        buyPut: trade.strikes?.buyPut || 0,
+        sellCall: trade.strikes?.sellCall || 0,
+        buyCall: trade.strikes?.buyCall || 0,
+        notes: trade.notes || "",
+        spxClosePrice: trade.spxClosePrice || 0,
+      });
+    }
+  }, [trade]);
 
-    setTrades(mockTrades);
-    setIsLoading(false);
-  }, [user]);
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
 
-  // Calculate statistics
-  const calculateStats = () => {
-    const totalTrades = trades.length;
-    let totalPnl = 0;
-    let winningTrades = 0;
+    // Validate required fields
+    if (!formData.tradeDate || !formData.level || formData.entryPremium <= 0) {
+      alert("Please fill in all required fields");
+      return;
+    }
 
-    trades.forEach((trade) => {
-      if (trade.pnl) {
-        totalPnl += trade.pnl;
-        if (trade.pnl > 0) {
-          winningTrades++;
+    // Calculate P&L if closing trade
+    let pnl = 0;
+    if (isClosing || formData.exitPremium > 0 || formData.spxClosePrice > 0) {
+      const contractMultiplier = 100; // Each contract is worth $100 per point
+      const entryTotal =
+        formData.entryPremium * formData.contractQuantity * contractMultiplier;
+      const fees = formData.fees || 0;
+
+      // For iron condors with SPX close price
+      if (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0) {
+        // Check if SPX closed between sell strikes (max profit)
+        const isMaxProfit =
+          formData.spxClosePrice > formData.sellPut &&
+          formData.spxClosePrice < formData.sellCall;
+
+        if (isMaxProfit) {
+          // Max profit: keep all premium
+          pnl = entryTotal - fees;
+        } else {
+          // Max loss: width of spread minus premium received
+          const maxLoss =
+            (5 - formData.entryPremium) *
+            formData.contractQuantity *
+            contractMultiplier;
+          pnl = -maxLoss - fees;
         }
       }
-    });
+      // For trades with explicit exit premium
+      else if (formData.exitPremium > 0) {
+        const exitTotal =
+          formData.exitPremium * formData.contractQuantity * contractMultiplier;
+        pnl = entryTotal - exitTotal - fees;
+      }
+    }
 
-    const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+    // Determine if the trade should be closed
+    const shouldClose =
+      isClosing ||
+      formData.exitPremium > 0 ||
+      (formData.tradeType === "IRON_CONDOR" && formData.spxClosePrice > 0);
 
-    return {
-      totalPnl,
-      winRate,
-      totalTrades,
-      winningTrades,
+    // Create trade object
+    const tradeData: Partial<Trade> = {
+      ...trade,
+      userId: user?.id || "",
+      userEmail: user?.email || "",
+      tradeDate: formData.tradeDate,
+      entryDate: trade?.entryDate || new Date().toISOString(),
+      level: formData.level,
+      contractQuantity: formData.contractQuantity,
+      entryPremium: formData.entryPremium,
+      exitPremium: shouldClose ? formData.exitPremium : undefined,
+      tradeType: formData.tradeType as
+        | "IRON_CONDOR"
+        | "PUT_SPREAD"
+        | "CALL_SPREAD",
+      strikes: {
+        sellPut: formData.sellPut,
+        buyPut: formData.buyPut,
+        sellCall: formData.sellCall,
+        buyCall: formData.buyCall,
+      },
+      status: shouldClose ? "CLOSED" : "OPEN",
+      pnl: shouldClose ? pnl : undefined,
+      fees: formData.fees,
+      notes: formData.notes,
+      isAutoPopulated: false,
+      matrix: formData.matrix,
+      buyingPower: formData.buyingPower,
+      spxClosePrice:
+        formData.spxClosePrice > 0 ? formData.spxClosePrice : undefined,
     };
-  };
 
-  // Apply filters and sorting
-  const getFilteredAndSortedTrades = () => {
-    let filtered = [...trades];
-
-    // Apply filter
-    if (filterType !== "All Trades") {
-      filtered = filtered.filter((trade) => trade.status === filterType);
+    if (shouldClose) {
+      tradeData.exitDate = new Date().toISOString();
     }
 
-    // Apply sorting
-    filtered.sort((a, b) => {
-      let comparison = 0;
-
-      switch (sortBy) {
-        case "Date":
-          comparison =
-            new Date(a.tradeDate).getTime() - new Date(b.tradeDate).getTime();
-          break;
-        case "Level":
-          comparison =
-            parseInt(a.level.replace("Level ", "")) -
-            parseInt(b.level.replace("Level ", ""));
-          break;
-        case "P&L":
-          comparison = (a.pnl || 0) - (b.pnl || 0);
-          break;
-        default:
-          comparison = 0;
-      }
-
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-
-    return filtered;
+    // Call the onSave function with the trade data
+    onSave(tradeData);
   };
 
-  // Group trades by series
-  const getGroupedTrades = () => {
-    const filteredTrades = getFilteredAndSortedTrades();
-
-    if (!groupBySeries) {
-      return filteredTrades.map((trade) => ({ type: "trade" as const, trade }));
-    }
-
-    const seriesMap = new Map<string, Trade[]>();
-    const singleTrades: Trade[] = [];
-
-    filteredTrades.forEach((trade) => {
-      if (trade.seriesId) {
-        if (!seriesMap.has(trade.seriesId)) {
-          seriesMap.set(trade.seriesId, []);
-        }
-        seriesMap.get(trade.seriesId)?.push(trade);
-      } else {
-        singleTrades.push(trade);
-      }
-    });
-
-    const displayItems: any[] = [];
-
-    // Add series groups
-    seriesMap.forEach((seriesTrades, seriesId) => {
-      const seriesPnl = seriesTrades.reduce(
-        (sum, trade) => sum + (trade.pnl || 0),
-        0
-      );
-
-      displayItems.push({
-        type: "series",
-        seriesId,
-        trades: seriesTrades,
-        pnl: seriesPnl,
-      });
-
-      seriesTrades.forEach((trade) => {
-        displayItems.push({ type: "trade", trade });
-      });
-    });
-
-    // Add single trades
-    singleTrades.forEach((trade) => {
-      displayItems.push({
-        type: "series",
-        seriesId: `single_${trade.id}`,
-        trades: [trade],
-        pnl: trade.pnl || 0,
-      });
-      displayItems.push({ type: "trade", trade });
-    });
-
-    return displayItems;
-  };
-
-  // Format functions
-  const formatCurrency = (amount: number) => {
-    const isNegative = amount < 0;
-    const absAmount = Math.abs(amount);
-    const formatted = absAmount.toFixed(2);
-    return isNegative ? `-${formatted}` : formatted;
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+  // Handle input changes
+  const handleInputChange = (field: string, value: any) => {
+    setFormData({
+      ...formData,
+      [field]: value,
     });
   };
-
-  const stats = calculateStats();
-  const groupedTrades = getGroupedTrades();
 
   return (
-    <div className="trade-ledger-page">
-      {/* Header */}
-      <div className="trade-ledger-header">
-        <h1>Trade Ledger</h1>
-        <button
-          className="add-trade-btn primary"
-          onClick={() => setIsAddTradeModalOpen(true)}
-        >
-          + Add Trade
-        </button>
-      </div>
+    <div className="trade-form">
+      <h2>{isClosing ? "Close Trade" : trade ? "Edit Trade" : "Add Trade"}</h2>
 
-      {/* Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-label">Total P&L</div>
-          <div
-            className={`stat-value ${
-              stats.totalPnl >= 0 ? "positive" : "negative"
-            }`}
-          >
-            ${formatCurrency(stats.totalPnl)}
+      <form onSubmit={handleSubmit}>
+        <div className="form-section">
+          <h3>Basic Information</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="tradeDate">Trade Date</label>
+              <input
+                type="date"
+                id="tradeDate"
+                value={formData.tradeDate}
+                onChange={(e) => handleInputChange("tradeDate", e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="level">Level</label>
+              <select
+                id="level"
+                value={formData.level}
+                onChange={(e) => handleInputChange("level", e.target.value)}
+                required
+              >
+                <option value="Level 1">Level 1</option>
+                <option value="Level 2">Level 2</option>
+                <option value="Level 3">Level 3</option>
+                <option value="Level 4">Level 4</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="matrix">Matrix Type</label>
+              <select
+                id="matrix"
+                value={formData.matrix}
+                onChange={(e) => handleInputChange("matrix", e.target.value)}
+              >
+                <option value="Standard Matrix">Standard Matrix</option>
+                <option value="Custom Matrix">Custom Matrix</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="buyingPower">Buying Power</label>
+              <select
+                id="buyingPower"
+                value={formData.buyingPower}
+                onChange={(e) =>
+                  handleInputChange("buyingPower", e.target.value)
+                }
+              >
+                <option value="$26,350">$26,350</option>
+                <option value="$52,700">$52,700</option>
+                <option value="$105,400">$105,400</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Win Rate</div>
-          <div className="stat-value">{stats.winRate.toFixed(1)}%</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Total Trades</div>
-          <div className="stat-value">{stats.totalTrades}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Winning Trades</div>
-          <div className="stat-value">{stats.winningTrades}</div>
-        </div>
-      </div>
 
-      {/* Filter Bar */}
-      <div className="filter-bar">
-        <div className="filter-group">
-          <label>Filter:</label>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-          >
-            <option value="All Trades">All Trades</option>
-            <option value="OPEN">Open</option>
-            <option value="CLOSED">Closed</option>
-          </select>
+        <div className="form-section">
+          <h3>Trade Details</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="tradeType">Trade Type</label>
+              <select
+                id="tradeType"
+                value={formData.tradeType}
+                onChange={(e) => handleInputChange("tradeType", e.target.value)}
+                required
+              >
+                <option value="IRON_CONDOR">Iron Condor</option>
+                <option value="PUT_SPREAD">Put Spread</option>
+                <option value="CALL_SPREAD">Call Spread</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="contractQuantity">Contracts</label>
+              <input
+                type="number"
+                id="contractQuantity"
+                value={formData.contractQuantity}
+                onChange={(e) =>
+                  handleInputChange(
+                    "contractQuantity",
+                    parseInt(e.target.value)
+                  )
+                }
+                min="1"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="entryPremium">Entry Premium ($)</label>
+              <input
+                type="number"
+                id="entryPremium"
+                value={formData.entryPremium}
+                onChange={(e) =>
+                  handleInputChange("entryPremium", parseFloat(e.target.value))
+                }
+                step="0.01"
+                min="0"
+                required
+              />
+            </div>
+
+            {(isClosing || trade?.status === "CLOSED") && (
+              <div className="form-group">
+                <label htmlFor="exitPremium">Exit Premium ($)</label>
+                <input
+                  type="number"
+                  id="exitPremium"
+                  value={formData.exitPremium}
+                  onChange={(e) =>
+                    handleInputChange("exitPremium", parseFloat(e.target.value))
+                  }
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="fees">Total Fees ($)</label>
+              <input
+                type="number"
+                id="fees"
+                value={formData.fees}
+                onChange={(e) =>
+                  handleInputChange("fees", parseFloat(e.target.value))
+                }
+                step="0.01"
+                min="0"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="filter-group">
-          <label>Sort by:</label>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="Date">Date</option>
-            <option value="Level">Level</option>
-            <option value="P&L">P&L</option>
-          </select>
-          <button
-            className="sort-direction"
-            onClick={() =>
-              setSortDirection(sortDirection === "asc" ? "desc" : "asc")
-            }
-          >
-            {sortDirection === "asc" ? "↑" : "↓"}
+        <div className="form-section">
+          <h3>Strike Prices</h3>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="buyPut">Buy Put Strike</label>
+              <input
+                type="number"
+                id="buyPut"
+                value={formData.buyPut}
+                onChange={(e) =>
+                  handleInputChange("buyPut", parseInt(e.target.value))
+                }
+                required={
+                  formData.tradeType === "IRON_CONDOR" ||
+                  formData.tradeType === "PUT_SPREAD"
+                }
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="sellPut">Sell Put Strike</label>
+              <input
+                type="number"
+                id="sellPut"
+                value={formData.sellPut}
+                onChange={(e) =>
+                  handleInputChange("sellPut", parseInt(e.target.value))
+                }
+                required={
+                  formData.tradeType === "IRON_CONDOR" ||
+                  formData.tradeType === "PUT_SPREAD"
+                }
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="sellCall">Sell Call Strike</label>
+              <input
+                type="number"
+                id="sellCall"
+                value={formData.sellCall}
+                onChange={(e) =>
+                  handleInputChange("sellCall", parseInt(e.target.value))
+                }
+                required={
+                  formData.tradeType === "IRON_CONDOR" ||
+                  formData.tradeType === "CALL_SPREAD"
+                }
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="buyCall">Buy Call Strike</label>
+              <input
+                type="number"
+                id="buyCall"
+                value={formData.buyCall}
+                onChange={(e) =>
+                  handleInputChange("buyCall", parseInt(e.target.value))
+                }
+                required={
+                  formData.tradeType === "IRON_CONDOR" ||
+                  formData.tradeType === "CALL_SPREAD"
+                }
+              />
+            </div>
+          </div>
+        </div>
+
+        {isClosing && (
+          <div className="form-section">
+            <h3>Close Trade Details</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="spxClosePrice">SPX Close Price</label>
+                <input
+                  type="number"
+                  id="spxClosePrice"
+                  value={formData.spxClosePrice}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "spxClosePrice",
+                      parseFloat(e.target.value)
+                    )
+                  }
+                  step="0.01"
+                />
+                <small className="form-text">
+                  Enter the SPX close price to automatically calculate P&L for
+                  Iron Condors
+                </small>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="form-section">
+          <h3>Additional Notes</h3>
+          <div className="form-row">
+            <div className="form-group full-width">
+              <textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => handleInputChange("notes", e.target.value)}
+                placeholder="Add any notes about this trade..."
+                rows={3}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="form-actions">
+          <button type="button" className="btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary">
+            {isClosing ? "Close Trade" : trade ? "Update Trade" : "Add Trade"}
           </button>
         </div>
-
-        <div className="filter-group">
-          <input
-            type="checkbox"
-            id="group-series"
-            checked={groupBySeries}
-            onChange={(e) => setGroupBySeries(e.target.checked)}
-          />
-          <label htmlFor="group-series">Group by Series</label>
-        </div>
-
-        <div className="sync-info">Last synced: {formatTime(lastSyncTime)}</div>
-      </div>
-
-      {/* Trades Table */}
-      <div className="trades-table-container">
-        <table className="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Level</th>
-              <th>Type</th>
-              <th>Contracts</th>
-              <th>Sell Put</th>
-              <th>Sell Call</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>SPX Close</th>
-              <th>Status</th>
-              <th>P&L</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupedTrades.map((item, index) => {
-              if (item.type === "series") {
-                return (
-                  <tr key={`series-${item.seriesId}`} className="series-row">
-                    <td colSpan={10}>
-                      {item.trades.length > 1
-                        ? `${item.trades.length} Trade Series`
-                        : `1 Trade Series`}
-                    </td>
-                    <td
-                      className={`series-pnl ${
-                        item.pnl >= 0 ? "positive" : "negative"
-                      }`}
-                    >
-                      {formatCurrency(item.pnl)}
-                    </td>
-                    <td></td>
-                  </tr>
-                );
-              } else {
-                const trade = item.trade;
-                return (
-                  <tr key={trade.id}>
-                    <td>{formatDate(trade.tradeDate)}</td>
-                    <td>
-                      <span
-                        className={`level-badge level-${trade.level
-                          .toLowerCase()
-                          .replace(" ", "-")}`}
-                      >
-                        {trade.level}
-                      </span>
-                    </td>
-                    <td>{trade.tradeType.replace("_", " ")}</td>
-                    <td>{trade.contractQuantity}</td>
-                    <td>{trade.strikes.sellPut}</td>
-                    <td>{trade.strikes.sellCall}</td>
-                    <td>{trade.entryPremium.toFixed(2)}</td>
-                    <td>{trade.exitPremium?.toFixed(2) || "0.00"}</td>
-                    <td
-                      className={`spx-close ${
-                        trade.spxClosePrice &&
-                        (trade.spxClosePrice > trade.strikes.sellCall
-                          ? "breach"
-                          : trade.spxClosePrice < trade.strikes.sellPut
-                          ? "breach"
-                          : "")
-                      }`}
-                    >
-                      {trade.spxClosePrice || "-"}
-                      {trade.isMaxProfit && (
-                        <span className="check-mark">✓</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge ${trade.status.toLowerCase()}`}
-                      >
-                        {trade.status}
-                      </span>
-                    </td>
-                    <td
-                      className={`pnl ${
-                        trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
-                      }`}
-                    >
-                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-                    </td>
-                    <td>
-                      <button
-                        className="action-btn"
-                        onClick={() => {
-                          setCurrentTrade(trade);
-                          setIsEditTradeModalOpen(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="action-btn delete"
-                        onClick={() => {
-                          if (window.confirm("Delete this trade?")) {
-                            // Delete logic here
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Modals */}
-      {isAddTradeModalOpen && (
-        <TradeForm
-          onSave={(tradeData) => {
-            // Add trade logic
-            setIsAddTradeModalOpen(false);
-          }}
-          onCancel={() => setIsAddTradeModalOpen(false)}
-        />
-      )}
-
-      {isEditTradeModalOpen && currentTrade && (
-        <TradeForm
-          trade={currentTrade}
-          onSave={(tradeData) => {
-            // Update trade logic
-            setIsEditTradeModalOpen(false);
-            setCurrentTrade(null);
-          }}
-          onCancel={() => {
-            setIsEditTradeModalOpen(false);
-            setCurrentTrade(null);
-          }}
-        />
-      )}
+      </form>
     </div>
   );
 };
 
-export default TradeLedger;
+export default TradeForm;

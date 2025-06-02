@@ -13,6 +13,8 @@ import { GoogleAuthProvider, useAuth } from "./GoogleAuthContext";
 import GoogleProtectedRoute from "./GoogleProtectedRoute";
 import TradeLedger from "./TradeLedger";
 import TradeForm from "./TradeForm";
+import TestTradeAdd from "./TestTradeAdd";
+import TestTradeLedger from "./TestTradeLedger";
 
 // Header component with user info and logout
 const AppHeader: React.FC = () => {
@@ -53,6 +55,22 @@ const AppHeader: React.FC = () => {
           }
         >
           Trade Ledger
+        </NavLink>
+        <NavLink
+          to="/test-trade"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Test Trade Add
+        </NavLink>
+        <NavLink
+          to="/test-ledger"
+          className={({ isActive }) =>
+            isActive ? "nav-link active" : "nav-link"
+          }
+        >
+          Test Ledger
         </NavLink>
       </div>
 
@@ -146,6 +164,8 @@ const AppContent: React.FC = () => {
         <Route path="/" element={<IronCondorCalculator />} />
         <Route path="/ledger" element={<TradeLedger />} />
         <Route path="/compounding" element={<MatrixCompounding />} />
+        <Route path="/test-trade" element={<TestTradeAdd />} />
+        <Route path="/test-ledger" element={<TestTradeLedger />} />
         <Route
           path="/spx-matrix"
           element={
