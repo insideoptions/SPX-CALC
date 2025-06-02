@@ -53,145 +53,39 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [groupBySeries, setGroupBySeries] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
-  // Mock data for demonstration
+  // Fetch trades from AWS database
   useEffect(() => {
-    // Mock trades data
-    const mockTrades: Trade[] = [
-      {
-        id: "1",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-14",
-        entryDate: "2025-05-14",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.85,
-        exitPremium: 5.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5505,
-          buyPut: 5500,
-          sellCall: 5655,
-          buyCall: 5660,
-        },
-        status: "CLOSED",
-        pnl: -321.56,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5400,
-        seriesId: "series_1",
-      },
-      {
-        id: "2",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-15",
-        entryDate: "2025-05-15",
-        level: "Level 3",
-        contractQuantity: 5,
-        entryPremium: 1.95,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5775,
-          buyPut: 5770,
-          sellCall: 5855,
-          buyCall: 5860,
-        },
-        status: "CLOSED",
-        pnl: 968.44,
-        fees: 32.8,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5825,
-        isMaxProfit: true,
-        seriesId: "series_1",
-      },
-      {
-        id: "3",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-21",
-        entryDate: "2025-05-21",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.85,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 6000,
-          buyCall: 6005,
-        },
-        status: "CLOSED",
-        pnl: 178.44,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5905,
-        isMaxProfit: true,
-      },
-      {
-        id: "4",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-28",
-        entryDate: "2025-05-28",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 2.0,
-        exitPremium: 0.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 5955,
-          buyCall: 5960,
-        },
-        status: "CLOSED",
-        pnl: 193.44,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5889,
-        isMaxProfit: true,
-      },
-      {
-        id: "5",
-        userId: user?.id || "",
-        userEmail: user?.email || "",
-        tradeDate: "2025-05-30",
-        entryDate: "2025-05-30",
-        level: "Level 2",
-        contractQuantity: 1,
-        entryPremium: 1.95,
-        exitPremium: 5.0,
-        tradeType: "IRON_CONDOR",
-        strikes: {
-          sellPut: 5885,
-          buyPut: 5880,
-          sellCall: 5955,
-          buyCall: 5960,
-        },
-        status: "CLOSED",
-        pnl: -314.56,
-        fees: 6.56,
-        isAutoPopulated: false,
-        matrix: "standard",
-        buyingPower: "$26,350",
-        spxClosePrice: 5960,
-      },
-    ];
-
-    setTrades(mockTrades);
-    setIsLoading(false);
-  }, [user]);
+    const loadTrades = async () => {
+      if (!user?.email) {
+        setIsLoading(false);
+        return;
+      }
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        console.log('Fetching trades for user:', user.email);
+        const fetchedTrades = await fetchTrades(user.email);
+        console.log('Trades fetched successfully:', fetchedTrades);
+        
+        setTrades(fetchedTrades);
+        setLastSyncTime(new Date());
+        
+        // If there's a callback for trade updates, call it
+        if (onTradeUpdate) {
+          onTradeUpdate(fetchedTrades);
+        }
+      } catch (err) {
+        console.error('Error loading trades:', err);
+        setError('Failed to load trades. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadTrades();
+  }, [user, onTradeUpdate]);
 
   // Calculate statistics
   const calculateStats = () => {
@@ -518,9 +412,24 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       </button>
                       <button
                         className="action-btn delete"
-                        onClick={() => {
+                        onClick={async () => {
                           if (window.confirm("Delete this trade?")) {
-                            // Delete logic here
+                            try {
+                              setIsLoading(true);
+                              const success = await deleteTrade(trade.id);
+                              if (success) {
+                                // Remove from local state
+                                setTrades(trades.filter(t => t.id !== trade.id));
+                                setLastSyncTime(new Date());
+                              } else {
+                                setError('Failed to delete trade. Please try again.');
+                              }
+                            } catch (err) {
+                              console.error('Error deleting trade:', err);
+                              setError('Failed to delete trade. Please try again.');
+                            } finally {
+                              setIsLoading(false);
+                            }
                           }
                         }}
                       >
@@ -535,12 +444,71 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         </table>
       </div>
 
+      {/* Error message */}
+      {error && (
+        <div className="error-message">
+          {error}
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      
+      {/* Loading indicator */}
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+          <div>Loading...</div>
+        </div>
+      )}
+      
       {/* Modals */}
       {isAddTradeModalOpen && (
         <TradeForm
-          onSave={(tradeData) => {
-            // Add trade logic
-            setIsAddTradeModalOpen(false);
+          onSave={async (tradeData) => {
+            try {
+              setIsLoading(true);
+              setError(null);
+              
+              // Ensure user data is included and all required fields are present
+              const newTrade: Omit<Trade, 'id'> = {
+                ...tradeData as Partial<Trade>,
+                userId: user?.id || '',
+                userEmail: user?.email || '',
+                tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
+                entryDate: tradeData.entryDate || new Date().toISOString().split('T')[0],
+                level: tradeData.level || 'Level 2',
+                contractQuantity: tradeData.contractQuantity || 1,
+                entryPremium: tradeData.entryPremium || 0,
+                tradeType: tradeData.tradeType || 'IRON_CONDOR',
+                strikes: tradeData.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+                status: tradeData.status || 'OPEN',
+                fees: tradeData.fees || 6.56,
+                isAutoPopulated: false,
+                matrix: tradeData.matrix || 'standard',
+                buyingPower: tradeData.buyingPower || '$26,350'
+              };
+              
+              // Save to AWS
+              const savedTrade = await createTrade(newTrade);
+              
+              if (savedTrade) {
+                // Update local state
+                setTrades([...trades, savedTrade]);
+                setLastSyncTime(new Date());
+                setIsAddTradeModalOpen(false);
+                
+                // If there's a callback for trade updates, call it
+                if (onTradeUpdate) {
+                  onTradeUpdate([...trades, savedTrade]);
+                }
+              } else {
+                setError('Failed to save trade. Please try again.');
+              }
+            } catch (err) {
+              console.error('Error saving trade:', err);
+              setError('Failed to save trade. Please try again.');
+            } finally {
+              setIsLoading(false);
+            }
           }}
           onCancel={() => setIsAddTradeModalOpen(false)}
         />
@@ -549,15 +517,48 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {isEditTradeModalOpen && currentTrade && (
         <TradeForm
           trade={currentTrade}
-          onSave={(tradeData) => {
-            // Update trade logic
-            setIsEditTradeModalOpen(false);
-            setCurrentTrade(null);
+          onSave={async (tradeData) => {
+            try {
+              setIsLoading(true);
+              setError(null);
+              
+              // Ensure ID is preserved
+              const updatedTrade = {
+                ...tradeData,
+                id: currentTrade.id,
+                userId: currentTrade.userId || user?.id || '',
+                userEmail: currentTrade.userEmail || user?.email || ''
+              } as Trade;
+              
+              // Update in AWS
+              const savedTrade = await updateTrade(updatedTrade);
+              
+              if (savedTrade) {
+                // Update local state
+                setTrades(trades.map(t => t.id === savedTrade.id ? savedTrade : t));
+                setLastSyncTime(new Date());
+                setIsEditTradeModalOpen(false);
+                setCurrentTrade(null);
+                
+                // If there's a callback for trade updates, call it
+                if (onTradeUpdate) {
+                  onTradeUpdate(trades.map(t => t.id === savedTrade.id ? savedTrade : t));
+                }
+              } else {
+                setError('Failed to update trade. Please try again.');
+              }
+            } catch (err) {
+              console.error('Error updating trade:', err);
+              setError('Failed to update trade. Please try again.');
+            } finally {
+              setIsLoading(false);
+            }
           }}
           onCancel={() => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
           }}
+          isClosing={currentTrade.status === 'OPEN'}
         />
       )}
     </div>
