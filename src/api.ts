@@ -14,7 +14,9 @@ export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
     console.log("Fetching trades for user:", userEmail);
 
     // Add a stronger cache-busting parameter to prevent browser caching
-    const cacheBuster = `${new Date().getTime()}_${Math.random().toString(36).substring(2)}`;
+    const cacheBuster = `${new Date().getTime()}_${Math.random()
+      .toString(36)
+      .substring(2)}`;
     const response = await fetch(
       `${API_URL}/trades?userEmail=${encodeURIComponent(
         userEmail
@@ -23,17 +25,20 @@ export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json",
+          Accept: "application/json",
           "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0",
+          Pragma: "no-cache",
+          Expires: "0",
         },
         mode: "cors", // Explicitly set CORS mode
       }
     );
 
     console.log("Fetch response status:", response.status);
-    console.log("Fetch response headers:", Object.fromEntries(response.headers.entries()));
+    console.log(
+      "Fetch response headers:",
+      Object.fromEntries(response.headers.entries())
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -56,7 +61,7 @@ export const createTrade = async (
 ): Promise<Trade | null> => {
   try {
     console.log("Creating trade with AWS:", trade);
-    
+
     // Generate a client-side ID to ensure we have one
     const tradeWithId = {
       ...trade,
@@ -69,11 +74,15 @@ export const createTrade = async (
       // Ensure numeric fields are numbers
       contractQuantity: Number(tradeWithId.contractQuantity) || 1,
       entryPremium: Number(tradeWithId.entryPremium) || 0,
-      exitPremium: tradeWithId.exitPremium ? Number(tradeWithId.exitPremium) : undefined,
+      exitPremium: tradeWithId.exitPremium
+        ? Number(tradeWithId.exitPremium)
+        : undefined,
       fees: Number(tradeWithId.fees) || 0,
       pnl: tradeWithId.pnl ? Number(tradeWithId.pnl) : undefined,
-      spxClosePrice: tradeWithId.spxClosePrice ? Number(tradeWithId.spxClosePrice) : undefined,
-      
+      spxClosePrice: tradeWithId.spxClosePrice
+        ? Number(tradeWithId.spxClosePrice)
+        : undefined,
+
       // Ensure strikes are properly formatted
       strikes: {
         sellPut: Number(tradeWithId.strikes?.sellPut) || 0,
@@ -81,32 +90,36 @@ export const createTrade = async (
         sellCall: Number(tradeWithId.strikes?.sellCall) || 0,
         buyCall: Number(tradeWithId.strikes?.buyCall) || 0,
       },
-      
+
       // Ensure dates are in ISO format
-      tradeDate: tradeWithId.tradeDate || new Date().toISOString().split('T')[0],
+      tradeDate:
+        tradeWithId.tradeDate || new Date().toISOString().split("T")[0],
       entryDate: tradeWithId.entryDate || new Date().toISOString(),
       exitDate: tradeWithId.exitDate || undefined,
-      
+
       // Ensure required string fields
-      userId: tradeWithId.userId || '',
-      userEmail: tradeWithId.userEmail || '',
-      level: tradeWithId.level || 'Level 2',
-      tradeType: tradeWithId.tradeType || 'IRON_CONDOR',
-      status: tradeWithId.status || 'OPEN',
-      matrix: tradeWithId.matrix || 'standard',
-      buyingPower: tradeWithId.buyingPower || '$26,350',
-      
+      userId: tradeWithId.userId || "",
+      userEmail: tradeWithId.userEmail || "",
+      level: tradeWithId.level || "Level 2",
+      tradeType: tradeWithId.tradeType || "IRON_CONDOR",
+      status: tradeWithId.status || "OPEN",
+      matrix: tradeWithId.matrix || "standard",
+      buyingPower: tradeWithId.buyingPower || "$26,350",
+
       // Ensure boolean fields
       isAutoPopulated: Boolean(tradeWithId.isAutoPopulated),
-      isMaxProfit: tradeWithId.isMaxProfit !== undefined ? Boolean(tradeWithId.isMaxProfit) : undefined,
-      
+      isMaxProfit:
+        tradeWithId.isMaxProfit !== undefined
+          ? Boolean(tradeWithId.isMaxProfit)
+          : undefined,
+
       // Optional fields
-      notes: tradeWithId.notes || '',
+      notes: tradeWithId.notes || "",
       seriesId: tradeWithId.seriesId || undefined,
     };
 
     // Remove undefined fields to clean up the payload
-    Object.keys(formattedTrade).forEach(key => {
+    Object.keys(formattedTrade).forEach((key) => {
       if (formattedTrade[key as keyof typeof formattedTrade] === undefined) {
         delete formattedTrade[key as keyof typeof formattedTrade];
       }
@@ -120,19 +133,22 @@ export const createTrade = async (
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json",
+        Accept: "application/json",
       },
       mode: "cors", // Explicitly set CORS mode
       body: JSON.stringify(formattedTrade),
     });
 
     console.log("API Response Status:", response.status);
-    console.log("API Response Headers:", Object.fromEntries(response.headers.entries()));
+    console.log(
+      "API Response Headers:",
+      Object.fromEntries(response.headers.entries())
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error("API Error Response:", errorText);
-      
+
       // More specific error handling
       if (response.status === 403) {
         throw new Error("Access forbidden. Please check your authentication.");
@@ -150,7 +166,7 @@ export const createTrade = async (
     return data || formattedTrade; // Fall back to the local version if no data returned
   } catch (error) {
     console.error("Error creating trade in AWS:", error);
-    
+
     // Re-throw with more specific error message
     if (error instanceof Error) {
       throw error;
@@ -174,8 +190,10 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
       exitPremium: trade.exitPremium ? Number(trade.exitPremium) : undefined,
       fees: Number(trade.fees) || 0,
       pnl: trade.pnl ? Number(trade.pnl) : undefined,
-      spxClosePrice: trade.spxClosePrice ? Number(trade.spxClosePrice) : undefined,
-      
+      spxClosePrice: trade.spxClosePrice
+        ? Number(trade.spxClosePrice)
+        : undefined,
+
       // Ensure strikes are properly formatted
       strikes: {
         sellPut: Number(trade.strikes?.sellPut) || 0,
@@ -186,7 +204,7 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
     };
 
     // Remove undefined fields
-    Object.keys(formattedTrade).forEach(key => {
+    Object.keys(formattedTrade).forEach((key) => {
       if (formattedTrade[key as keyof typeof formattedTrade] === undefined) {
         delete formattedTrade[key as keyof typeof formattedTrade];
       }
@@ -200,7 +218,7 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json",
+        Accept: "application/json",
       },
       mode: "cors", // Explicitly set CORS mode
       body: JSON.stringify(formattedTrade),
@@ -211,7 +229,7 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("API Error Response:", errorText);
-      
+
       // More specific error handling
       if (response.status === 403) {
         throw new Error("Access forbidden. Please check your authentication.");
@@ -231,7 +249,7 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
     return data || formattedTrade; // Fall back to the local version if no data returned
   } catch (error) {
     console.error("Error updating trade in AWS:", error);
-    
+
     // Re-throw with more specific error message
     if (error instanceof Error) {
       throw error;
@@ -252,7 +270,7 @@ export const deleteTrade = async (tradeId: string): Promise<boolean> => {
     const response = await fetch(`${API_URL}/trades/${tradeId}`, {
       method: "DELETE",
       headers: {
-        "Accept": "application/json",
+        Accept: "application/json",
         "Content-Type": "application/json",
       },
       mode: "cors", // Explicitly set CORS mode
@@ -263,7 +281,7 @@ export const deleteTrade = async (tradeId: string): Promise<boolean> => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("API Error Response:", errorText);
-      
+
       // More specific error handling
       if (response.status === 403) {
         throw new Error("Access forbidden. Please check your authentication.");
@@ -280,7 +298,7 @@ export const deleteTrade = async (tradeId: string): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error("Error deleting trade from AWS:", error);
-    
+
     // Re-throw with more specific error message
     if (error instanceof Error) {
       throw error;
