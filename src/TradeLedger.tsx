@@ -85,7 +85,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     };
 
     loadTrades();
-  }, [user, onTradeUpdate]);
+
+    // Set up automatic refresh every 30 seconds
+    const interval = setInterval(loadTrades, 30000);
+
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [user, onTradeUpdate]); // Also refresh when user changes
 
   // Calculate statistics
   const calculateStats = () => {
