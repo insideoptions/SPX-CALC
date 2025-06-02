@@ -60,30 +60,30 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         setIsLoading(false);
         return;
       }
-      
+
       setIsLoading(true);
       setError(null);
-      
+
       try {
-        console.log('Fetching trades for user:', user.email);
+        console.log("Fetching trades for user:", user.email);
         const fetchedTrades = await fetchTrades(user.email);
-        console.log('Trades fetched successfully:', fetchedTrades);
-        
+        console.log("Trades fetched successfully:", fetchedTrades);
+
         setTrades(fetchedTrades);
         setLastSyncTime(new Date());
-        
+
         // If there's a callback for trade updates, call it
         if (onTradeUpdate) {
           onTradeUpdate(fetchedTrades);
         }
       } catch (err) {
-        console.error('Error loading trades:', err);
-        setError('Failed to load trades. Please try again later.');
+        console.error("Error loading trades:", err);
+        setError("Failed to load trades. Please try again later.");
       } finally {
         setIsLoading(false);
       }
     };
-    
+
     loadTrades();
   }, [user, onTradeUpdate]);
 
@@ -224,6 +224,170 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       minute: "2-digit",
       hour12: true,
     });
+  };
+
+  // Handle save trade
+  const handleSaveTrade = async (tradeData: Partial<Trade>) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Ensure user data is included and all required fields are present
+      // Extract strikes from tradeData if they exist
+      const strikes = tradeData.strikes || {
+        sellPut: (tradeData as any).sellPut || 0,
+        buyPut: (tradeData as any).buyPut || 0,
+        sellCall: (tradeData as any).sellCall || 0,
+        buyCall: (tradeData as any).buyCall || 0,
+      };
+
+      // Create a properly formatted trade object with all required fields
+      const newTrade: Omit<Trade, "id"> = {
+        userId: user?.id || "",
+        userEmail: user?.email || "",
+        tradeDate:
+          tradeData.tradeDate || new Date().toISOString().split("T")[0],
+        entryDate:
+          tradeData.entryDate || new Date().toISOString().split("T")[0],
+        level: tradeData.level || "Level 2",
+        contractQuantity: tradeData.contractQuantity || 1,
+        entryPremium: tradeData.entryPremium || 0,
+        tradeType: tradeData.tradeType || "IRON_CONDOR",
+        strikes: strikes,
+        status: tradeData.status || "OPEN",
+        fees: tradeData.fees || 6.56,
+        isAutoPopulated: false,
+        matrix: tradeData.matrix || "standard",
+        buyingPower: tradeData.buyingPower || "$26,350",
+      };
+
+      // Add optional fields if they exist
+      if (tradeData.exitPremium) newTrade.exitPremium = tradeData.exitPremium;
+      if (tradeData.pnl) newTrade.pnl = tradeData.pnl;
+      if (tradeData.notes) newTrade.notes = tradeData.notes;
+      if (tradeData.spxClosePrice)
+        newTrade.spxClosePrice = tradeData.spxClosePrice;
+      if (tradeData.isMaxProfit) newTrade.isMaxProfit = tradeData.isMaxProfit;
+      if (tradeData.seriesId) newTrade.seriesId = tradeData.seriesId;
+
+      // Save to AWS
+      const savedTrade = await createTrade(newTrade);
+
+      if (savedTrade) {
+        // Update local state
+        setTrades([...trades, savedTrade]);
+        setLastSyncTime(new Date());
+        setIsAddTradeModalOpen(false);
+
+        // If there's a callback for trade updates, call it
+        if (onTradeUpdate) {
+          onTradeUpdate([...trades, savedTrade]);
+        }
+      } else {
+        setError("Failed to save trade. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error saving trade:", err);
+      setError("Failed to save trade. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle update trade
+  const handleUpdateTrade = async (tradeData: Partial<Trade>) => {
+    if (!currentTrade) return;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Extract strikes from tradeData if they exist
+      const strikes = tradeData.strikes || {
+        sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
+        buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
+        sellCall: (tradeData as any).sellCall || currentTrade.strikes.sellCall,
+        buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall,
+      };
+
+      // Ensure ID is preserved and all required fields are present
+      const updatedTrade: Trade = {
+        id: currentTrade.id,
+        userId: currentTrade.userId || user?.id || "",
+        userEmail: currentTrade.userEmail || user?.email || "",
+        tradeDate: tradeData.tradeDate || currentTrade.tradeDate,
+        entryDate: tradeData.entryDate || currentTrade.entryDate,
+        level: tradeData.level || currentTrade.level,
+        contractQuantity:
+          tradeData.contractQuantity || currentTrade.contractQuantity,
+        entryPremium: tradeData.entryPremium || currentTrade.entryPremium,
+        tradeType: tradeData.tradeType || currentTrade.tradeType,
+        strikes: strikes,
+        status: tradeData.status || currentTrade.status,
+        fees: tradeData.fees || currentTrade.fees,
+        isAutoPopulated: currentTrade.isAutoPopulated,
+        matrix: tradeData.matrix || currentTrade.matrix,
+        buyingPower: tradeData.buyingPower || currentTrade.buyingPower,
+      };
+
+      // Add optional fields if they exist
+      if (
+        tradeData.exitPremium !== undefined ||
+        currentTrade.exitPremium !== undefined
+      ) {
+        updatedTrade.exitPremium =
+          tradeData.exitPremium !== undefined
+            ? tradeData.exitPremium
+            : currentTrade.exitPremium;
+      }
+      if (tradeData.exitDate || currentTrade.exitDate)
+        updatedTrade.exitDate = tradeData.exitDate || currentTrade.exitDate;
+      if (tradeData.pnl !== undefined || currentTrade.pnl !== undefined) {
+        updatedTrade.pnl =
+          tradeData.pnl !== undefined ? tradeData.pnl : currentTrade.pnl;
+      }
+      if (tradeData.notes || currentTrade.notes)
+        updatedTrade.notes = tradeData.notes || currentTrade.notes;
+      if (tradeData.spxClosePrice || currentTrade.spxClosePrice)
+        updatedTrade.spxClosePrice =
+          tradeData.spxClosePrice || currentTrade.spxClosePrice;
+      if (
+        tradeData.isMaxProfit !== undefined ||
+        currentTrade.isMaxProfit !== undefined
+      ) {
+        updatedTrade.isMaxProfit =
+          tradeData.isMaxProfit !== undefined
+            ? tradeData.isMaxProfit
+            : currentTrade.isMaxProfit;
+      }
+      if (tradeData.seriesId || currentTrade.seriesId)
+        updatedTrade.seriesId = tradeData.seriesId || currentTrade.seriesId;
+
+      // Update in AWS
+      const savedTrade = await updateTrade(updatedTrade);
+
+      if (savedTrade) {
+        // Update local state
+        setTrades(trades.map((t) => (t.id === savedTrade.id ? savedTrade : t)));
+        setLastSyncTime(new Date());
+        setIsEditTradeModalOpen(false);
+        setCurrentTrade(null);
+
+        // If there's a callback for trade updates, call it
+        if (onTradeUpdate) {
+          onTradeUpdate(
+            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
+          );
+        }
+      } else {
+        setError("Failed to update trade. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error updating trade:", err);
+      setError("Failed to update trade. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const stats = calculateStats();
@@ -419,14 +583,20 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                               const success = await deleteTrade(trade.id);
                               if (success) {
                                 // Remove from local state
-                                setTrades(trades.filter(t => t.id !== trade.id));
+                                setTrades(
+                                  trades.filter((t) => t.id !== trade.id)
+                                );
                                 setLastSyncTime(new Date());
                               } else {
-                                setError('Failed to delete trade. Please try again.');
+                                setError(
+                                  "Failed to delete trade. Please try again."
+                                );
                               }
                             } catch (err) {
-                              console.error('Error deleting trade:', err);
-                              setError('Failed to delete trade. Please try again.');
+                              console.error("Error deleting trade:", err);
+                              setError(
+                                "Failed to delete trade. Please try again."
+                              );
                             } finally {
                               setIsLoading(false);
                             }
@@ -451,7 +621,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <button onClick={() => setError(null)}>×</button>
         </div>
       )}
-      
+
       {/* Loading indicator */}
       {isLoading && (
         <div className="loading-overlay">
@@ -459,73 +629,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           <div>Loading...</div>
         </div>
       )}
-      
+
       {/* Modals */}
       {isAddTradeModalOpen && (
         <TradeForm
-          onSave={async (tradeData) => {
-            try {
-              setIsLoading(true);
-              setError(null);
-              
-              // Ensure user data is included and all required fields are present
-              // Extract strikes from tradeData if they exist
-              const strikes = tradeData.strikes || {
-                sellPut: (tradeData as any).sellPut || 0,
-                buyPut: (tradeData as any).buyPut || 0,
-                sellCall: (tradeData as any).sellCall || 0,
-                buyCall: (tradeData as any).buyCall || 0
-              };
-              
-              // Create a properly formatted trade object with all required fields
-              const newTrade: Omit<Trade, 'id'> = {
-                userId: user?.id || '',
-                userEmail: user?.email || '',
-                tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
-                entryDate: tradeData.entryDate || new Date().toISOString().split('T')[0],
-                level: tradeData.level || 'Level 2',
-                contractQuantity: tradeData.contractQuantity || 1,
-                entryPremium: tradeData.entryPremium || 0,
-                tradeType: tradeData.tradeType || 'IRON_CONDOR',
-                strikes: strikes,
-                status: tradeData.status || 'OPEN',
-                fees: tradeData.fees || 6.56,
-                isAutoPopulated: false,
-                matrix: tradeData.matrix || 'standard',
-                buyingPower: tradeData.buyingPower || '$26,350'
-              };
-              
-              // Add optional fields if they exist
-              if (tradeData.exitPremium) newTrade.exitPremium = tradeData.exitPremium;
-              if (tradeData.pnl) newTrade.pnl = tradeData.pnl;
-              if (tradeData.notes) newTrade.notes = tradeData.notes;
-              if (tradeData.spxClosePrice) newTrade.spxClosePrice = tradeData.spxClosePrice;
-              if (tradeData.isMaxProfit) newTrade.isMaxProfit = tradeData.isMaxProfit;
-              if (tradeData.seriesId) newTrade.seriesId = tradeData.seriesId;
-              
-              // Save to AWS
-              const savedTrade = await createTrade(newTrade);
-              
-              if (savedTrade) {
-                // Update local state
-                setTrades([...trades, savedTrade]);
-                setLastSyncTime(new Date());
-                setIsAddTradeModalOpen(false);
-                
-                // If there's a callback for trade updates, call it
-                if (onTradeUpdate) {
-                  onTradeUpdate([...trades, savedTrade]);
-                }
-              } else {
-                setError('Failed to save trade. Please try again.');
-              }
-            } catch (err) {
-              console.error('Error saving trade:', err);
-              setError('Failed to save trade. Please try again.');
-            } finally {
-              setIsLoading(false);
-            }
-          }}
+          onSave={handleSaveTrade}
           onCancel={() => setIsAddTradeModalOpen(false)}
         />
       )}
@@ -533,76 +641,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {isEditTradeModalOpen && currentTrade && (
         <TradeForm
           trade={currentTrade}
-          onSave={async (tradeData) => {
-            try {
-              setIsLoading(true);
-              setError(null);
-              
-              // Extract strikes from tradeData if they exist
-              const strikes = tradeData.strikes || {
-                sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
-                buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
-                sellCall: (tradeData as any).sellCall || currentTrade.strikes.sellCall,
-                buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall
-              };
-              
-              // Ensure ID is preserved and all required fields are present
-              const updatedTrade: Trade = {
-                id: currentTrade.id,
-                userId: currentTrade.userId || user?.id || '',
-                userEmail: currentTrade.userEmail || user?.email || '',
-                tradeDate: tradeData.tradeDate || currentTrade.tradeDate,
-                entryDate: tradeData.entryDate || currentTrade.entryDate,
-                level: tradeData.level || currentTrade.level,
-                contractQuantity: tradeData.contractQuantity || currentTrade.contractQuantity,
-                entryPremium: tradeData.entryPremium || currentTrade.entryPremium,
-                tradeType: tradeData.tradeType || currentTrade.tradeType,
-                strikes: strikes,
-                status: tradeData.status || currentTrade.status,
-                fees: tradeData.fees || currentTrade.fees,
-                isAutoPopulated: currentTrade.isAutoPopulated,
-                matrix: tradeData.matrix || currentTrade.matrix,
-                buyingPower: tradeData.buyingPower || currentTrade.buyingPower
-              };
-              
-              // Add optional fields if they exist
-              if (tradeData.exitPremium || currentTrade.exitPremium) updatedTrade.exitPremium = tradeData.exitPremium || currentTrade.exitPremium;
-              if (tradeData.exitDate || currentTrade.exitDate) updatedTrade.exitDate = tradeData.exitDate || currentTrade.exitDate;
-              if (tradeData.pnl || currentTrade.pnl) updatedTrade.pnl = tradeData.pnl || currentTrade.pnl;
-              if (tradeData.notes || currentTrade.notes) updatedTrade.notes = tradeData.notes || currentTrade.notes;
-              if (tradeData.spxClosePrice || currentTrade.spxClosePrice) updatedTrade.spxClosePrice = tradeData.spxClosePrice || currentTrade.spxClosePrice;
-              if (tradeData.isMaxProfit || currentTrade.isMaxProfit) updatedTrade.isMaxProfit = tradeData.isMaxProfit || currentTrade.isMaxProfit;
-              if (tradeData.seriesId || currentTrade.seriesId) updatedTrade.seriesId = tradeData.seriesId || currentTrade.seriesId;
-              
-              // Update in AWS
-              const savedTrade = await updateTrade(updatedTrade);
-              
-              if (savedTrade) {
-                // Update local state
-                setTrades(trades.map(t => t.id === savedTrade.id ? savedTrade : t));
-                setLastSyncTime(new Date());
-                setIsEditTradeModalOpen(false);
-                setCurrentTrade(null);
-                
-                // If there's a callback for trade updates, call it
-                if (onTradeUpdate) {
-                  onTradeUpdate(trades.map(t => t.id === savedTrade.id ? savedTrade : t));
-                }
-              } else {
-                setError('Failed to update trade. Please try again.');
-              }
-            } catch (err) {
-              console.error('Error updating trade:', err);
-              setError('Failed to update trade. Please try again.');
-            } finally {
-              setIsLoading(false);
-            }
-          }}
+          onSave={handleUpdateTrade}
           onCancel={() => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
           }}
-          isClosing={currentTrade.status === 'OPEN'}
+          isClosing={currentTrade.status === "OPEN"}
         />
       )}
     </div>
