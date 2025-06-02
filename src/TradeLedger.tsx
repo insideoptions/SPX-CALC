@@ -469,8 +469,16 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               setError(null);
               
               // Ensure user data is included and all required fields are present
+              // Extract strikes from tradeData if they exist
+              const strikes = tradeData.strikes || {
+                sellPut: (tradeData as any).sellPut || 0,
+                buyPut: (tradeData as any).buyPut || 0,
+                sellCall: (tradeData as any).sellCall || 0,
+                buyCall: (tradeData as any).buyCall || 0
+              };
+              
+              // Create a properly formatted trade object with all required fields
               const newTrade: Omit<Trade, 'id'> = {
-                ...tradeData as Partial<Trade>,
                 userId: user?.id || '',
                 userEmail: user?.email || '',
                 tradeDate: tradeData.tradeDate || new Date().toISOString().split('T')[0],
@@ -479,13 +487,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                 contractQuantity: tradeData.contractQuantity || 1,
                 entryPremium: tradeData.entryPremium || 0,
                 tradeType: tradeData.tradeType || 'IRON_CONDOR',
-                strikes: tradeData.strikes || { sellPut: 0, buyPut: 0, sellCall: 0, buyCall: 0 },
+                strikes: strikes,
                 status: tradeData.status || 'OPEN',
                 fees: tradeData.fees || 6.56,
                 isAutoPopulated: false,
                 matrix: tradeData.matrix || 'standard',
                 buyingPower: tradeData.buyingPower || '$26,350'
               };
+              
+              // Add optional fields if they exist
+              if (tradeData.exitPremium) newTrade.exitPremium = tradeData.exitPremium;
+              if (tradeData.pnl) newTrade.pnl = tradeData.pnl;
+              if (tradeData.notes) newTrade.notes = tradeData.notes;
+              if (tradeData.spxClosePrice) newTrade.spxClosePrice = tradeData.spxClosePrice;
+              if (tradeData.isMaxProfit) newTrade.isMaxProfit = tradeData.isMaxProfit;
+              if (tradeData.seriesId) newTrade.seriesId = tradeData.seriesId;
               
               // Save to AWS
               const savedTrade = await createTrade(newTrade);
@@ -522,13 +538,41 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
               setIsLoading(true);
               setError(null);
               
-              // Ensure ID is preserved
-              const updatedTrade = {
-                ...tradeData,
+              // Extract strikes from tradeData if they exist
+              const strikes = tradeData.strikes || {
+                sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
+                buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
+                sellCall: (tradeData as any).sellCall || currentTrade.strikes.sellCall,
+                buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall
+              };
+              
+              // Ensure ID is preserved and all required fields are present
+              const updatedTrade: Trade = {
                 id: currentTrade.id,
                 userId: currentTrade.userId || user?.id || '',
-                userEmail: currentTrade.userEmail || user?.email || ''
-              } as Trade;
+                userEmail: currentTrade.userEmail || user?.email || '',
+                tradeDate: tradeData.tradeDate || currentTrade.tradeDate,
+                entryDate: tradeData.entryDate || currentTrade.entryDate,
+                level: tradeData.level || currentTrade.level,
+                contractQuantity: tradeData.contractQuantity || currentTrade.contractQuantity,
+                entryPremium: tradeData.entryPremium || currentTrade.entryPremium,
+                tradeType: tradeData.tradeType || currentTrade.tradeType,
+                strikes: strikes,
+                status: tradeData.status || currentTrade.status,
+                fees: tradeData.fees || currentTrade.fees,
+                isAutoPopulated: currentTrade.isAutoPopulated,
+                matrix: tradeData.matrix || currentTrade.matrix,
+                buyingPower: tradeData.buyingPower || currentTrade.buyingPower
+              };
+              
+              // Add optional fields if they exist
+              if (tradeData.exitPremium || currentTrade.exitPremium) updatedTrade.exitPremium = tradeData.exitPremium || currentTrade.exitPremium;
+              if (tradeData.exitDate || currentTrade.exitDate) updatedTrade.exitDate = tradeData.exitDate || currentTrade.exitDate;
+              if (tradeData.pnl || currentTrade.pnl) updatedTrade.pnl = tradeData.pnl || currentTrade.pnl;
+              if (tradeData.notes || currentTrade.notes) updatedTrade.notes = tradeData.notes || currentTrade.notes;
+              if (tradeData.spxClosePrice || currentTrade.spxClosePrice) updatedTrade.spxClosePrice = tradeData.spxClosePrice || currentTrade.spxClosePrice;
+              if (tradeData.isMaxProfit || currentTrade.isMaxProfit) updatedTrade.isMaxProfit = tradeData.isMaxProfit || currentTrade.isMaxProfit;
+              if (tradeData.seriesId || currentTrade.seriesId) updatedTrade.seriesId = tradeData.seriesId || currentTrade.seriesId;
               
               // Update in AWS
               const savedTrade = await updateTrade(updatedTrade);
