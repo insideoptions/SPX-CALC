@@ -6,6 +6,7 @@ interface User {
   name: string;
   picture: string;
   id: string;
+  uid?: string; // Added for compatibility with TradeLedger.tsx
 }
 
 interface AuthContextType {
