@@ -560,40 +560,22 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                     <td>{trade.contractQuantity}</td>
                     <td>{trade.strikes.sellPut}</td>
                     <td>{trade.strikes.sellCall}</td>
-                    <td>{trade.entryPremium.toFixed(2)}</td>
-                    <td>{trade.exitPremium?.toFixed(2) || "0.00"}</td>
+                    <td>{trade.entryPremium}</td>
+                    <td>{trade.exitPremium ?? "-"}</td>
+                    <td>{trade.spxClosePrice ?? "-"}</td>
+                    <td>{trade.status}</td>
                     <td
-                      className={`spx-close ${
-                        trade.spxClosePrice &&
-                        (trade.spxClosePrice > trade.strikes.sellCall
-                          ? "breach"
-                          : trade.spxClosePrice < trade.strikes.sellPut
-                          ? "breach"
-                          : "")
-                      }`}
-                    >
-                      {trade.spxClosePrice || "-"}
-                      {trade.isMaxProfit && (
-                        <span className="check-mark">✓</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge ${trade.status.toLowerCase()}`}
-                      >
-                        {trade.status}
-                      </span>
-                    </td>
-                    <td
-                      className={`pnl ${
+                      className={`${
                         trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
                       }`}
                     >
-                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                      {trade.pnl !== undefined
+                        ? formatCurrency(trade.pnl)
+                        : "-"}
                     </td>
                     <td>
                       <button
-                        className="action-btn"
+                        className="action-btn edit"
                         onClick={() => {
                           setCurrentTrade(trade);
                           setIsEditTradeModalOpen(true);
