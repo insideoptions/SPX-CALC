@@ -270,17 +270,15 @@ export const deleteTrade = async (
     // Log the full request details for debugging
     console.log("API Request URL:", `${API_URL}/trades/${tradeId}`);
 
-    const response = await fetch(
-      `${API_URL}/trades/${tradeId}?userEmail=${encodeURIComponent(userEmail)}`,
-      {
-        method: "DELETE",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        mode: "cors", // Explicitly set CORS mode
-      }
-    );
+    const response = await fetch(`${API_URL}/trades/${tradeId}`, {
+      method: "DELETE",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "x-user-email": userEmail,
+      },
+      mode: "cors", // Explicitly set CORS mode
+    });
 
     console.log("API Response Status:", response.status);
 
