@@ -260,7 +260,10 @@ export const updateTrade = async (trade: Trade): Promise<Trade | null> => {
 };
 
 // Delete a trade
-export const deleteTrade = async (tradeId: string): Promise<boolean> => {
+export const deleteTrade = async (
+  tradeId: string,
+  userEmail: string
+): Promise<boolean> => {
   try {
     console.log("Deleting trade from AWS:", tradeId);
 
@@ -273,6 +276,7 @@ export const deleteTrade = async (tradeId: string): Promise<boolean> => {
         Accept: "application/json",
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({ userEmail }),
       mode: "cors", // Explicitly set CORS mode
     });
 
