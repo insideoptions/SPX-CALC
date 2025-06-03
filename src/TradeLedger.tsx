@@ -607,7 +607,10 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                           if (window.confirm("Delete this trade?")) {
                             try {
                               setIsLoading(true);
-                              const success = await deleteTrade(trade.id, user.email);
+                              const success = await deleteTrade(
+                                trade.id,
+                                user.email
+                              );
                               if (success) {
                                 // Remove from local state
                                 setTrades(
