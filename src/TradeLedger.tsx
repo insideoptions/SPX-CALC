@@ -429,24 +429,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         <h1>Trade Ledger</h1>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
-            className="add-trade-btn"
-            onClick={async () => {
-              setIsLoading(true);
-              try {
-                const fetchedTrades = await fetchTrades(user?.email || "");
-                setTrades(fetchedTrades);
-                setLastSyncTime(new Date());
-              } catch (err) {
-                setError("Failed to refresh trades.");
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            style={{ backgroundColor: "#6b7280" }}
-          >
-            🔄 Refresh
-          </button>
-          <button
             className="add-trade-btn primary"
             onClick={() => setIsAddTradeModalOpen(true)}
           >

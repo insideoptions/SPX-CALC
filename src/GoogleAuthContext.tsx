@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 
 // Types
 interface User {
@@ -134,7 +134,7 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const signInWithGoogle = () => {
+  const signInWithGoogle = useCallback(() => {
     console.log("Starting Google Sign-In...");
 
     if (window.google && window.google.accounts) {
@@ -152,9 +152,9 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
         "Google Sign-In is not available. Please refresh the page and try again."
       );
     }
-  };
+  }, []);
 
-  const signOut = () => {
+  const signOut = useCallback(() => {
     console.log("Signing out...");
     setUser(null);
     localStorage.removeItem("googleUser");
@@ -162,18 +162,18 @@ export const GoogleAuthProvider: React.FC<{ children: React.ReactNode }> = ({
     if (window.google && window.google.accounts) {
       window.google.accounts.id.disableAutoSelect();
     }
-  };
+  }, []);
+
+  const contextValue = useMemo(() => ({
+    user,
+    isAuthenticated: !!user,
+    isLoading,
+    signInWithGoogle,
+    signOut,
+  }), [user, isLoading, signInWithGoogle, signOut]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        signInWithGoogle,
-        signOut,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
