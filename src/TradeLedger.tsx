@@ -34,15 +34,12 @@ export interface Trade {
   seriesId?: string;
 }
 
-// API Functions - Inline for testing
-const API_BASE_URL =
-  "https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod";
-
+// API Functions - Inline for testing with hardcoded URL
 const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
   try {
     console.log("Fetching trades for user:", userEmail);
 
-    const fetchUrl = `${API_BASE_URL}/trades?userEmail=${encodeURIComponent(
+    const fetchUrl = `https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod/trades?userEmail=${encodeURIComponent(
       userEmail
     )}`;
     console.log("Fetch URL:", fetchUrl);
@@ -77,7 +74,9 @@ const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
     console.log("Creating trade:", trade);
 
     const response = await fetch(
-      `${API_BASE_URL}/trades?userEmail=${encodeURIComponent(trade.userEmail)}`,
+      `https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod/trades?userEmail=${encodeURIComponent(
+        trade.userEmail
+      )}`,
       {
         method: "POST",
         headers: {
@@ -111,9 +110,9 @@ const updateTrade = async (trade: Trade): Promise<Trade> => {
     console.log("Updating trade:", trade);
 
     const response = await fetch(
-      `${API_BASE_URL}/trades/${trade.id}?userEmail=${encodeURIComponent(
-        trade.userEmail
-      )}`,
+      `https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod/trades/${
+        trade.id
+      }?userEmail=${encodeURIComponent(trade.userEmail)}`,
       {
         method: "PUT",
         headers: {
@@ -149,7 +148,7 @@ const deleteTrade = async (
   try {
     console.log("Deleting trade from AWS:", tradeId);
 
-    const deleteUrl = `${API_BASE_URL}/trades/${tradeId}?userEmail=${encodeURIComponent(
+    const deleteUrl = `https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod/trades/${tradeId}?userEmail=${encodeURIComponent(
       userEmail
     )}`;
     console.log("Delete URL:", deleteUrl);
