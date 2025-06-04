@@ -13,6 +13,83 @@ import "./TradeLedger.css";
 // Re-export Trade type for other components that import from TradeLedger
 export type { Trade } from "./api";
 
+// Helper function to check for consecutive days
+const isConsecutiveDay = (dateStr1: string, dateStr2: string): boolean => {
+  const date1 = new Date(dateStr1);
+  const date2 = new Date(dateStr2);
+  // Normalize to UTC to avoid timezone issues when comparing dates
+  const utcDate1 = new Date(
+    Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate())
+  );
+  const utcDate2 = new Date(
+    Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate())
+  );
+
+  const diffTime = utcDate2.getTime() - utcDate1.getTime();
+  const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  return diffDays === 1;
+};
+
+// Helper function to get numeric level
+const getNumericLevel = (levelStr: string): number => {
+  if (!levelStr) return 0; // Handle cases where level might be undefined or empty
+  return parseInt(levelStr.replace(/Level /i, ""), 10) || 0; // Ensure it handles 'level ' case-insensitively and defaults to 0 if parsing fails
+};
+
+// Function to assign series IDs based on escalation logic
+const assignEscalationSeriesIds = (incomingTrades: Trade[]): Trade[] => {
+  // Sort by date (asc) then by level (asc) to correctly identify escalations
+  const trades = [...incomingTrades].sort((a, b) => {
+    const dateA = new Date(a.tradeDate).getTime();
+    const dateB = new Date(b.tradeDate).getTime();
+    if (dateA !== dateB) return dateA - dateB;
+
+    // Ensure levels are valid before parsing
+    const levelA = a.level ? getNumericLevel(a.level) : 0;
+    const levelB = b.level ? getNumericLevel(b.level) : 0;
+    return levelA - levelB;
+  });
+
+  if (trades.length < 2) {
+    return trades.map((t) => ({ ...t })); // Return copies
+  }
+
+  const processedTrades = trades.map((t) => ({ ...t })); // Work with copies
+
+  for (let i = 1; i < processedTrades.length; i++) {
+    const prevTrade = processedTrades[i - 1];
+    const currentTrade = processedTrades[i];
+
+    // Ensure tradeDate and level are valid before processing
+    if (
+      !prevTrade.tradeDate ||
+      !currentTrade.tradeDate ||
+      !prevTrade.level ||
+      !currentTrade.level
+    ) {
+      continue;
+    }
+
+    const prevLevel = getNumericLevel(prevTrade.level);
+    const currentLevel = getNumericLevel(currentTrade.level);
+
+    if (
+      isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
+      currentLevel === prevLevel + 1
+    ) {
+      if (prevTrade.seriesId) {
+        currentTrade.seriesId = prevTrade.seriesId;
+      } else {
+        // Create a new seriesId for the pair if prevTrade doesn't have one
+        const newSeriesId = `series_${prevTrade.id}_${Date.now()}`;
+        prevTrade.seriesId = newSeriesId;
+        currentTrade.seriesId = newSeriesId;
+      }
+    }
+  }
+  return processedTrades;
+};
+
 interface TradeLedgerProps {
   onTradeUpdate?: (trades: Trade[]) => void;
 }
@@ -134,16 +211,18 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Group trades by series
   const getGroupedTrades = () => {
-    const filteredTrades = getFilteredAndSortedTrades();
+    let workingTrades = getFilteredAndSortedTrades();
+    workingTrades = assignEscalationSeriesIds(workingTrades);
 
     if (!groupBySeries) {
-      return filteredTrades.map((trade) => ({ type: "trade" as const, trade }));
+      return workingTrades.map((trade) => ({ type: "trade" as const, trade }));
     }
 
+    // If groupBySeries is true, proceed with mapping and grouping using workingTrades
     const seriesMap = new Map<string, Trade[]>();
     const singleTrades: Trade[] = [];
 
-    filteredTrades.forEach((trade) => {
+    workingTrades.forEach((trade: Trade) => {
       if (trade.seriesId) {
         if (!seriesMap.has(trade.seriesId)) {
           seriesMap.set(trade.seriesId, []);
