@@ -30,24 +30,7 @@ export interface Trade {
 }
 
 const API_BASE_URL =
-  "https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod";
-
-// Test function to verify the endpoint exists
-const testEndpoint = async () => {
-  try {
-    console.log("Testing endpoint connectivity...");
-    const response = await fetch(
-      `${API_BASE_URL}/trades?userEmail=test@test.com`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-    console.log("Endpoint test result:", response.status);
-  } catch (error) {
-    console.error("Endpoint test failed:", error);
-  }
-};
+  "https://woitixbcei.execute-api.us-east-1.amazonaws.com/prod";
 
 export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
   try {
