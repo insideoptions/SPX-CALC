@@ -207,31 +207,14 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
 
     if (!trade) {
       // Adding a new trade
-      tradeDataToSave.status = "CLOSED";
-      tradeDataToSave.exitDate = formData.tradeDate;
-
-      if (formData.tradeType === "IRON_CONDOR") {
-        if (currentSpxClosePrice === undefined) {
-          alert("SPX Close Price is required for new Iron Condor trades.");
-          return;
-        }
-        tradeDataToSave.spxClosePrice = currentSpxClosePrice;
-        tradeDataToSave.exitPremium = undefined;
-      } else {
-        if (currentSpxClosePrice !== undefined) {
-          tradeDataToSave.spxClosePrice = currentSpxClosePrice;
-          tradeDataToSave.exitPremium = undefined;
-        } else if (currentExitPremium !== undefined) {
-          tradeDataToSave.exitPremium = currentExitPremium;
-          tradeDataToSave.spxClosePrice = undefined;
-          const ep = tradeDataToSave.entryPremium ?? 0;
-          const cq = tradeDataToSave.contractQuantity ?? 0;
-          const f = tradeDataToSave.fees ?? 0;
-          finalPnl = (ep - currentExitPremium) * cq * 100 - f; // Recalculate PNL for this case
-        } else {
-          // Default to SPX based PNL or 0 if not calculable
-        }
+      if (currentSpxClosePrice === undefined) {
+        alert("SPX Close Price is required for all new trades.");
+        return;
       }
+      tradeDataToSave.status = "CLOSED";
+      tradeDataToSave.exitDate = new Date().toISOString().split("T")[0]; // Set to current date
+      tradeDataToSave.spxClosePrice = currentSpxClosePrice;
+      tradeDataToSave.exitPremium = undefined; // Ensure exit premium is not set for new trades
       tradeDataToSave.pnl = finalPnl;
     } else {
       // Editing an existing trade
@@ -366,13 +349,9 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
   let spxInputRequired = false;
 
   if (isNewTrade) {
-    showSpxInput = true; // Always offer SPX for new trades, becomes primary for IC
-    if (isIronCondor) {
-      spxInputRequired = true; // Mandatory for new ICs
-      showExitPremiumInput = false; // Don't show exit premium for new ICs, SPX is the way
-    } else {
-      showExitPremiumInput = true; // Offer for non-ICs as alternative if SPX is not filled
-    }
+    showSpxInput = true; // SPX input is always shown for new trades
+    spxInputRequired = true; // SPX input is always required for new trades
+    showExitPremiumInput = false; // Exit Premium is never shown for new trades
   } else if (isEditingOpenTrade) {
     showSpxInput = true; // Offer SPX to close any open trade
     showExitPremiumInput = true; // Offer Exit Premium to close any open trade
