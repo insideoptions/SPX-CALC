@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
+import CloseTradeModal from "./CloseTradeModal";
 import {
   fetchTrades,
   createTrade,
@@ -9,7 +10,7 @@ import {
   type Trade,
 } from "./api";
 import "./TradeLedger.css";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4 } from 'uuid';
 
 // Re-export Trade type for other components that import from TradeLedger
 export type { Trade } from "./api";
@@ -19,13 +20,9 @@ const isConsecutiveDay = (dateStr1: string, dateStr2: string): boolean => {
   const date1 = new Date(dateStr1);
   const date2 = new Date(dateStr2);
   // Normalize to UTC to avoid timezone issues when comparing dates
-  const utcDate1 = new Date(
-    Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate())
-  );
-  const utcDate2 = new Date(
-    Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate())
-  );
-
+  const utcDate1 = new Date(Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate()));
+  const utcDate2 = new Date(Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate()));
+  
   const diffTime = utcDate2.getTime() - utcDate1.getTime();
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   return diffDays === 1;
@@ -44,34 +41,27 @@ const assignEscalationSeriesIds = (incomingTrades: Trade[]): Trade[] => {
     const dateA = new Date(a.tradeDate).getTime();
     const dateB = new Date(b.tradeDate).getTime();
     if (dateA !== dateB) return dateA - dateB;
-
+    
     const levelA = a.level ? getNumericLevel(a.level) : 0;
     const levelB = b.level ? getNumericLevel(b.level) : 0;
     return levelA - levelB;
   });
 
-  const processedTrades = trades.map((t) => ({ ...t })); // Work with copies
+  const processedTrades = trades.map(t => ({ ...t })); // Work with copies
 
   for (let i = 0; i < processedTrades.length; i++) {
     const currentTrade = processedTrades[i];
 
     if (i > 0) {
-      const prevTrade = processedTrades[i - 1];
+      const prevTrade = processedTrades[i-1];
 
       // Ensure tradeDate and level are valid before processing
-      if (
-        prevTrade.tradeDate &&
-        currentTrade.tradeDate &&
-        prevTrade.level &&
-        currentTrade.level
-      ) {
+      if (prevTrade.tradeDate && currentTrade.tradeDate && prevTrade.level && currentTrade.level) {
         const prevLevel = getNumericLevel(prevTrade.level);
         const currentLevel = getNumericLevel(currentTrade.level);
 
-        if (
-          isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
-          currentLevel === prevLevel + 1
-        ) {
+        if (isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) && 
+            currentLevel === prevLevel + 1) {
           // This is an escalation
           if (prevTrade.seriesId) {
             currentTrade.seriesId = prevTrade.seriesId;
@@ -115,6 +105,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [isAddTradeModalOpen, setIsAddTradeModalOpen] = useState(false);
   const [isEditTradeModalOpen, setIsEditTradeModalOpen] = useState(false);
   const [currentTrade, setCurrentTrade] = useState<Trade | null>(null);
+  const [tradeToClose, setTradeToClose] = useState<Trade | null>(null);
+  const [isCloseTradeModalOpen, setIsCloseTradeModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string>("All Trades");
@@ -122,6 +114,38 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [groupBySeries, setGroupBySeries] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
+
+  // Handler for saving a closed trade
+  const handleSaveClosedTrade = async (updatedTradeData: Partial<Trade>) => {
+    if (!tradeToClose || !user?.email) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Ensure the ID is part of the update payload
+      const tradeToUpdate = { ...tradeToClose, ...updatedTradeData, id: tradeToClose.id, userId: user.id, userEmail: user.email };
+      
+      const savedTrade = await updateTrade(tradeToUpdate as Trade); // Cast as Trade, assuming updateTrade expects full Trade
+
+      if (savedTrade) {
+        setTrades(prevTrades => prevTrades.map(t => t.id === savedTrade.id ? savedTrade : t));
+        setLastSyncTime(new Date());
+        setIsCloseTradeModalOpen(false);
+        setTradeToClose(null);
+        if (onTradeUpdate) {
+          onTradeUpdate(trades.map(t => (t.id === savedTrade.id ? savedTrade : t)));
+        }
+      } else {
+        setError('Failed to close trade. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error closing trade:', err);
+      setError('Failed to close trade. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Fetch trades from AWS database
   useEffect(() => {
@@ -705,6 +729,17 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       >
                         Delete
                       </button>
+                      {trade.status === "OPEN" && (
+                        <button
+                          className="action-btn close-btn" // You might want to add specific styling for close-btn
+                          onClick={() => {
+                            setTradeToClose(trade);
+                            setIsCloseTradeModalOpen(true);
+                          }}
+                        >
+                          Close
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -741,12 +776,24 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {isEditTradeModalOpen && currentTrade && (
         <TradeForm
           trade={currentTrade}
-          onSave={handleUpdateTrade}
+          onSave={handleSaveTrade} 
           onCancel={() => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
           }}
-          isClosing={currentTrade.status === "OPEN"}
+          // isClosing prop removed as it's not for general editing
+        />
+      )}
+
+      {/* Close Trade Modal */}
+      {isCloseTradeModalOpen && tradeToClose && (
+        <CloseTradeModal 
+          trade={tradeToClose}
+          onClose={() => {
+            setIsCloseTradeModalOpen(false);
+            setTradeToClose(null);
+          }}
+          onSave={handleSaveClosedTrade}
         />
       )}
     </div>
