@@ -3,7 +3,6 @@ import { Trade } from "./TradeLedger";
 const API_BASE_URL =
   "https://wo1t1xbcei.execute-api.us-east-1.amazonaws.com/prod";
 
-// Fetch all trades for a user
 export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
   try {
     console.log("Fetching trades for user:", userEmail);
@@ -38,7 +37,6 @@ export const fetchTrades = async (userEmail: string): Promise<Trade[]> => {
   }
 };
 
-// Create a new trade
 export const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
   try {
     console.log("Creating trade:", trade);
@@ -49,7 +47,7 @@ export const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Email": trade.userEmail, // Additional header for redundancy
+          "X-User-Email": trade.userEmail,
         },
         body: JSON.stringify(trade),
       }
@@ -73,7 +71,6 @@ export const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
   }
 };
 
-// Update an existing trade
 export const updateTrade = async (trade: Trade): Promise<Trade> => {
   try {
     console.log("Updating trade:", trade);
@@ -86,7 +83,7 @@ export const updateTrade = async (trade: Trade): Promise<Trade> => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "X-User-Email": trade.userEmail, // Additional header for redundancy
+          "X-User-Email": trade.userEmail,
         },
         body: JSON.stringify(trade),
       }
@@ -110,7 +107,6 @@ export const updateTrade = async (trade: Trade): Promise<Trade> => {
   }
 };
 
-// Delete a trade - THIS IS THE MAIN FIX
 export const deleteTrade = async (
   tradeId: string,
   userEmail: string
@@ -118,7 +114,6 @@ export const deleteTrade = async (
   try {
     console.log("Deleting trade from AWS:", tradeId);
 
-    // FIXED: Now includes userEmail as query parameter like your other API calls
     const deleteUrl = `${API_BASE_URL}/trades/${tradeId}?userEmail=${encodeURIComponent(
       userEmail
     )}`;
@@ -128,7 +123,7 @@ export const deleteTrade = async (
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
-        "X-User-Email": userEmail, // Additional header for redundancy
+        "X-User-Email": userEmail,
       },
     });
 
