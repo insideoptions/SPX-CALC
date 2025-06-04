@@ -9,6 +9,7 @@ import {
   type Trade,
 } from "./api";
 import "./TradeLedger.css";
+import { v4 as uuidv4 } from "uuid";
 
 // Re-export Trade type for other components that import from TradeLedger
 export type { Trade } from "./api";
@@ -44,46 +45,60 @@ const assignEscalationSeriesIds = (incomingTrades: Trade[]): Trade[] => {
     const dateB = new Date(b.tradeDate).getTime();
     if (dateA !== dateB) return dateA - dateB;
 
-    // Ensure levels are valid before parsing
     const levelA = a.level ? getNumericLevel(a.level) : 0;
     const levelB = b.level ? getNumericLevel(b.level) : 0;
     return levelA - levelB;
   });
 
-  if (trades.length < 2) {
-    return trades.map((t) => ({ ...t })); // Return copies
-  }
-
   const processedTrades = trades.map((t) => ({ ...t })); // Work with copies
 
-  for (let i = 1; i < processedTrades.length; i++) {
-    const prevTrade = processedTrades[i - 1];
+  for (let i = 0; i < processedTrades.length; i++) {
     const currentTrade = processedTrades[i];
 
-    // Ensure tradeDate and level are valid before processing
-    if (
-      !prevTrade.tradeDate ||
-      !currentTrade.tradeDate ||
-      !prevTrade.level ||
-      !currentTrade.level
-    ) {
-      continue;
-    }
+    if (i > 0) {
+      const prevTrade = processedTrades[i - 1];
 
-    const prevLevel = getNumericLevel(prevTrade.level);
-    const currentLevel = getNumericLevel(currentTrade.level);
+      // Ensure tradeDate and level are valid before processing
+      if (
+        prevTrade.tradeDate &&
+        currentTrade.tradeDate &&
+        prevTrade.level &&
+        currentTrade.level
+      ) {
+        const prevLevel = getNumericLevel(prevTrade.level);
+        const currentLevel = getNumericLevel(currentTrade.level);
 
-    if (
-      isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
-      currentLevel === prevLevel + 1
-    ) {
-      if (prevTrade.seriesId) {
-        currentTrade.seriesId = prevTrade.seriesId;
+        if (
+          isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
+          currentLevel === prevLevel + 1
+        ) {
+          // This is an escalation
+          if (prevTrade.seriesId) {
+            currentTrade.seriesId = prevTrade.seriesId;
+          } else {
+            // This case implies prevTrade is the start of a new series
+            const newSeriesId = uuidv4();
+            prevTrade.seriesId = newSeriesId;
+            currentTrade.seriesId = newSeriesId;
+          }
+        } else {
+          // Not an escalation from prevTrade, so currentTrade starts/continues its own series.
+          // If currentTrade doesn't have a seriesId, assign a new one.
+          if (!currentTrade.seriesId) {
+            currentTrade.seriesId = uuidv4();
+          }
+        }
       } else {
-        // Create a new seriesId for the pair if prevTrade doesn't have one
-        const newSeriesId = `series_${prevTrade.id}_${Date.now()}`;
-        prevTrade.seriesId = newSeriesId;
-        currentTrade.seriesId = newSeriesId;
+        // Invalid data for comparison, ensure currentTrade gets a seriesId if missing
+        if (!currentTrade.seriesId) {
+          currentTrade.seriesId = uuidv4();
+        }
+      }
+    } else {
+      // This is the first trade in the sorted list.
+      // If it doesn't have a seriesId, assign one.
+      if (!currentTrade.seriesId) {
+        currentTrade.seriesId = uuidv4();
       }
     }
   }
