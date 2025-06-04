@@ -11,7 +11,11 @@ export interface Trade {
   entryPremium: number;
   exitPremium?: number;
   tradeType: "IRON_CONDOR" | "PUT_SPREAD" | "CALL_SPREAD";
-  strikes: {
+  sellPut?: number; // Added for TradeForm compatibility
+  buyPut?: number;  // Added for TradeForm compatibility
+  sellCall?: number; // Added for TradeForm compatibility
+  buyCall?: number;  // Added for TradeForm compatibility
+  strikes: { // Kept for now to minimize breaking changes elsewhere
     sellPut: number;
     buyPut: number;
     sellCall: number;
