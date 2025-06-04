@@ -397,6 +397,50 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
+  // Handle delete trade - IMPROVED ERROR HANDLING
+  const handleDeleteTrade = async (trade: Trade) => {
+    if (window.confirm("Delete this trade?")) {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        console.log(
+          "Attempting to delete trade:",
+          trade.id,
+          "for user:",
+          user?.email
+        );
+
+        const success = await deleteTrade(trade.id, user?.email || "");
+
+        if (success) {
+          // Remove from local state
+          const updatedTrades = trades.filter((t) => t.id !== trade.id);
+          setTrades(updatedTrades);
+          setLastSyncTime(new Date());
+
+          // If there's a callback for trade updates, call it
+          if (onTradeUpdate) {
+            onTradeUpdate(updatedTrades);
+          }
+
+          console.log("Trade deleted successfully");
+        } else {
+          setError("Failed to delete trade. Please try again.");
+        }
+      } catch (err) {
+        console.error("Error deleting trade:", err);
+        setError(
+          `Failed to delete trade: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }`
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const stats = calculateStats();
   const groupedTrades = getGroupedTrades();
 
@@ -603,35 +647,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       </button>
                       <button
                         className="action-btn delete"
-                        onClick={async () => {
-                          if (window.confirm("Delete this trade?")) {
-                            try {
-                              setIsLoading(true);
-                              const success = await deleteTrade(
-                                trade.id,
-                                user.email
-                              );
-                              if (success) {
-                                // Remove from local state
-                                setTrades(
-                                  trades.filter((t) => t.id !== trade.id)
-                                );
-                                setLastSyncTime(new Date());
-                              } else {
-                                setError(
-                                  "Failed to delete trade. Please try again."
-                                );
-                              }
-                            } catch (err) {
-                              console.error("Error deleting trade:", err);
-                              setError(
-                                "Failed to delete trade. Please try again."
-                              );
-                            } finally {
-                              setIsLoading(false);
-                            }
-                          }
-                        }}
+                        onClick={() => handleDeleteTrade(trade)}
                       >
                         Delete
                       </button>
