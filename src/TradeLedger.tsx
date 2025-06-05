@@ -505,6 +505,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       console.log("Current trade ID:", currentTrade.id);
       console.log("Trade data received:", tradeData);
       console.log("Trade data ID:", tradeData.id);
+      console.log("Trade level being updated:", tradeData.level);
 
       setIsLoading(true);
       setError(null);
@@ -520,21 +521,53 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       // Ensure ID is preserved and all required fields are present
       const updatedTrade: Trade = {
         id: currentTrade.id,
-        userId: currentTrade.userId || user?.id || "",
-        userEmail: currentTrade.userEmail || user?.email || "",
-        tradeDate: tradeData.tradeDate || currentTrade.tradeDate,
-        entryDate: tradeData.entryDate || currentTrade.entryDate,
-        level: tradeData.level || currentTrade.level,
+        // Use explicit undefined checking for all fields instead of || operator
+        // This prevents issues with falsey values like 0, empty strings, etc.
+        userId:
+          currentTrade.userId !== undefined
+            ? currentTrade.userId
+            : user?.id || "",
+        userEmail:
+          currentTrade.userEmail !== undefined
+            ? currentTrade.userEmail
+            : user?.email || "",
+        tradeDate:
+          tradeData.tradeDate !== undefined
+            ? tradeData.tradeDate
+            : currentTrade.tradeDate,
+        entryDate:
+          tradeData.entryDate !== undefined
+            ? tradeData.entryDate
+            : currentTrade.entryDate,
+        level:
+          tradeData.level !== undefined ? tradeData.level : currentTrade.level,
         contractQuantity:
-          tradeData.contractQuantity || currentTrade.contractQuantity,
-        entryPremium: tradeData.entryPremium || currentTrade.entryPremium,
-        tradeType: tradeData.tradeType || currentTrade.tradeType,
+          tradeData.contractQuantity !== undefined
+            ? tradeData.contractQuantity
+            : currentTrade.contractQuantity,
+        entryPremium:
+          tradeData.entryPremium !== undefined
+            ? tradeData.entryPremium
+            : currentTrade.entryPremium,
+        tradeType:
+          tradeData.tradeType !== undefined
+            ? tradeData.tradeType
+            : currentTrade.tradeType,
         strikes: strikes,
-        status: tradeData.status || currentTrade.status,
-        fees: tradeData.fees || currentTrade.fees,
+        status:
+          tradeData.status !== undefined
+            ? tradeData.status
+            : currentTrade.status,
+        fees: tradeData.fees !== undefined ? tradeData.fees : currentTrade.fees,
         isAutoPopulated: currentTrade.isAutoPopulated,
-        matrix: tradeData.matrix || currentTrade.matrix,
-        buyingPower: tradeData.buyingPower || currentTrade.buyingPower,
+        matrix:
+          tradeData.matrix !== undefined
+            ? tradeData.matrix
+            : currentTrade.matrix,
+        buyingPower:
+          tradeData.buyingPower !== undefined
+            ? tradeData.buyingPower
+            : currentTrade.buyingPower,
       };
 
       // Add optional fields if they exist
@@ -553,14 +586,25 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           currentTrade.exitPremium
         );
       }
-      if (tradeData.exitDate || currentTrade.exitDate)
-        updatedTrade.exitDate = tradeData.exitDate || currentTrade.exitDate;
+      // Handle exitDate with proper undefined checking
+      if (
+        tradeData.exitDate !== undefined ||
+        currentTrade.exitDate !== undefined
+      ) {
+        updatedTrade.exitDate =
+          tradeData.exitDate !== undefined
+            ? tradeData.exitDate
+            : currentTrade.exitDate;
+      }
       if (tradeData.pnl !== undefined || currentTrade.pnl !== undefined) {
         updatedTrade.pnl =
           tradeData.pnl !== undefined ? tradeData.pnl : currentTrade.pnl;
       }
-      if (tradeData.notes || currentTrade.notes)
-        updatedTrade.notes = tradeData.notes || currentTrade.notes;
+      // Handle notes with proper undefined checking
+      if (tradeData.notes !== undefined || currentTrade.notes !== undefined) {
+        updatedTrade.notes =
+          tradeData.notes !== undefined ? tradeData.notes : currentTrade.notes;
+      }
       // Handle spxClosePrice carefully
       if (tradeData.spxClosePrice !== undefined) {
         updatedTrade.spxClosePrice = tradeData.spxClosePrice;
@@ -583,8 +627,16 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             ? tradeData.isMaxProfit
             : currentTrade.isMaxProfit;
       }
-      if (tradeData.seriesId || currentTrade.seriesId)
-        updatedTrade.seriesId = tradeData.seriesId || currentTrade.seriesId;
+      // Handle seriesId with proper undefined checking
+      if (
+        tradeData.seriesId !== undefined ||
+        currentTrade.seriesId !== undefined
+      ) {
+        updatedTrade.seriesId =
+          tradeData.seriesId !== undefined
+            ? tradeData.seriesId
+            : currentTrade.seriesId;
+      }
 
       console.log("Final trade being sent to API:", updatedTrade);
       console.log("Final exitPremium value:", updatedTrade.exitPremium);
