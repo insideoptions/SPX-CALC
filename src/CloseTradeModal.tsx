@@ -120,6 +120,9 @@ const CloseTradeModal: React.FC<CloseTradeModalProps> = ({
       }
     }
 
+    // Debug and ensure proper exitPremium value
+    console.log("CloseTradeModal final exitPremium:", exitPremium);
+
     const updatedTradeData: Partial<Trade> = {
       id: trade.id, // Important: ensure ID is passed for update
       spxClosePrice: Number(spxClosePrice),
@@ -128,6 +131,9 @@ const CloseTradeModal: React.FC<CloseTradeModalProps> = ({
       status: "CLOSED",
       exitPremium: exitPremium,
     };
+
+    // Log the full trade payload for debugging
+    console.log("CloseTradeModal sending trade update:", updatedTradeData);
     onSave(updatedTradeData);
   };
 

@@ -142,6 +142,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
   const handleSaveClosedTrade = async (updatedTradeData: Partial<Trade>) => {
     if (!tradeToClose || !user?.email) return;
 
+    console.log("===== CLOSE TRADE DEBUG =====");
+    console.log("Original trade ID:", tradeToClose.id);
+    console.log("Updated trade data:", updatedTradeData);
+    console.log("Exit Premium being sent:", updatedTradeData.exitPremium);
+
     setIsLoading(true);
     setError(null);
 
@@ -153,9 +158,15 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
         id: tradeToClose.id,
         userId: user.id,
         userEmail: user.email,
+        status: "CLOSED", // Force status to CLOSED
       };
 
+      console.log("Final trade being sent to updateTrade:", tradeToUpdate);
+      console.log("Final exitPremium value:", tradeToUpdate.exitPremium);
+
       const savedTrade = await updateTrade(tradeToUpdate as Trade); // Cast as Trade, assuming updateTrade expects full Trade
+      console.log("Response from AWS:", savedTrade);
+      console.log("Exit Premium in response:", savedTrade.exitPremium);
 
       if (savedTrade) {
         setTrades((prevTrades) =>
@@ -435,6 +446,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     if (!currentTrade) return;
 
     try {
+      console.log("===== EDIT TRADE DEBUG =====");
+      console.log("Current trade:", currentTrade);
+      console.log("Current trade ID:", currentTrade.id);
+      console.log("Trade data received:", tradeData);
+      console.log("Trade data ID:", tradeData.id);
+
       setIsLoading(true);
       setError(null);
 
@@ -471,8 +488,16 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       // tradeData.exitPremium could be 0, which is a valid value but evaluates as falsy
       if (tradeData.exitPremium !== undefined) {
         updatedTrade.exitPremium = tradeData.exitPremium;
+        console.log(
+          "Setting exitPremium from tradeData:",
+          tradeData.exitPremium
+        );
       } else if (currentTrade.exitPremium !== undefined) {
         updatedTrade.exitPremium = currentTrade.exitPremium;
+        console.log(
+          "Setting exitPremium from currentTrade:",
+          currentTrade.exitPremium
+        );
       }
       if (tradeData.exitDate || currentTrade.exitDate)
         updatedTrade.exitDate = tradeData.exitDate || currentTrade.exitDate;
@@ -507,8 +532,13 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       if (tradeData.seriesId || currentTrade.seriesId)
         updatedTrade.seriesId = tradeData.seriesId || currentTrade.seriesId;
 
+      console.log("Final trade being sent to API:", updatedTrade);
+      console.log("Final exitPremium value:", updatedTrade.exitPremium);
+
       // Update in AWS
       const savedTrade = await updateTrade(updatedTrade);
+      console.log("Response from AWS:", savedTrade);
+      console.log("Exit Premium in response:", savedTrade.exitPremium);
 
       if (savedTrade) {
         // Update local state
@@ -533,6 +563,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setIsLoading(false);
     }
   };
+
+  // The handleSaveClosedTrade function is now at line 131
 
   // Handle delete trade - IMPROVED ERROR HANDLING
   const handleDeleteTrade = async (trade: Trade) => {
@@ -986,7 +1018,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {isEditTradeModalOpen && currentTrade && (
         <TradeForm
           trade={currentTrade}
-          onSave={handleSaveTrade}
+          onSave={handleUpdateTrade}
           onCancel={() => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
