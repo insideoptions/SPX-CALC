@@ -453,11 +453,11 @@
 
 /* Mobile/Desktop View Toggle */
 .desktop-only {
-  display: block;
+  display: block !important;
 }
 
 .mobile-only {
-  display: none;
+  display: none !important;
 }
 
 /* Card View for Mobile */
@@ -580,11 +580,11 @@
 /* Mobile responsiveness tweaks */
 @media (max-width: 768px) {
   .desktop-only {
-    display: none;
+    display: none !important;
   }
 
   .mobile-only {
-    display: block;
+    display: block !important;
   }
 
   .trade-ledger-header {
@@ -621,7 +621,7 @@
     padding: 0.5rem;
     font-size: 0.875rem;
   }
-
+  
   .action-btn {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;

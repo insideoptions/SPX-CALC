@@ -624,13 +624,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             <div className="form-section mobile-pnl">
               <div className="pnl-display-mobile">
                 <span className="pnl-label">Calculated P&L:</span>
-                <span
-                  className={
-                    pnlForDisplay >= 0
-                      ? "pnl-value positive"
-                      : "pnl-value negative"
-                  }
-                >
+                <span className={pnlForDisplay >= 0 ? "pnl-value positive" : "pnl-value negative"}>
                   ${pnlForDisplay.toFixed(2)}
                 </span>
               </div>
@@ -652,3 +646,4 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
 };
 
 export default TradeForm;
+
