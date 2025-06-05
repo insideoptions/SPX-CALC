@@ -370,6 +370,9 @@ const SpxMatrixUser: React.FC = () => {
 
     if (!currentRow) return null;
 
+    // Check if this is the shifted matrix to show Level 6
+    const isShiftedMatrix = selectedMatrix === "shifted";
+
     return (
       <div className="card">
         <h3 className="section-title">
@@ -401,6 +404,17 @@ const SpxMatrixUser: React.FC = () => {
               </div>
             );
           })}
+
+          {/* Show Level 6 only for Shifted Matrix */}
+          {isShiftedMatrix && (
+            <div key={6} className="quantity-card trade-card">
+              <div className="quantity-level">LEVEL 6</div>
+              <div className="quantity-value trade-value">
+                {(currentRow as ShiftedMatrixRow).level6}
+              </div>
+              <div className="quantity-label">contracts</div>
+            </div>
+          )}
         </div>
       </div>
     );
