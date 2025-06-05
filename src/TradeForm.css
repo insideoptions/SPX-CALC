@@ -356,3 +356,52 @@
     width: 100%;
   }
 }
+
+/* Close Early / Partial W/L Section */
+.early-close-section {
+  border-top: 1px solid #eee;
+  margin-top: 15px;
+  padding-top: 10px;
+  width: 100%;
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.checkbox-container input[type="checkbox"] {
+  margin-right: 10px;
+  width: 18px;
+  height: 18px;
+}
+
+.custom-exit-info {
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 5px;
+  margin-bottom: 10px;
+}
+
+.exit-premium-hint {
+  font-size: 0.9rem;
+  margin-top: 5px;
+  padding: 5px;
+  border-radius: 4px;
+  background-color: #f0f8ff;
+  color: #333;
+  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .early-close-section h4 {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+  
+  .exit-premium-hint {
+    font-size: 0.85rem;
+  }
+}
+

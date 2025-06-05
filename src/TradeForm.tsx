@@ -31,6 +31,8 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     matrix: trade?.matrix || "standard",
     buyingPower: trade?.buyingPower || "$26,350",
     spxClosePrice: trade?.spxClosePrice || "",
+    useCustomExit: false,
+    customExitPremium: "",
   });
 
   // Calculate P&L based on form data
@@ -109,40 +111,92 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
   const handleInputChange = (field: string, value: any) => {
     console.log(`Updating field ${field} with value:`, value);
 
-    // If updating SPX close price for an iron condor, automatically update other fields
-    const numericValue = parseFloat(String(value));
     if (
       field === "spxClosePrice" &&
-      !isNaN(numericValue) &&
-      numericValue > 0 && // Ensure value is a positive number
-      formData.tradeType === "IRON_CONDOR"
+      formData.tradeType === "IRON_CONDOR" &&
+      value.trim() !== ""
     ) {
-      const sellPutNum = parseFloat(String(formData.sellPut));
-      const sellCallNum = parseFloat(String(formData.sellCall));
-      const isMaxProfit =
-        !isNaN(sellPutNum) &&
-        !isNaN(sellCallNum) &&
-        numericValue > sellPutNum &&
-        numericValue < sellCallNum;
+      const spxClose = parseFloat(value);
+      const sellPut = parseFloat(String(formData.sellPut));
+      const sellCall = parseFloat(String(formData.sellCall));
 
-      // For iron condors with SPX close price, automatically set exit premium
-      // If it's a win (SPX between sell strikes), exit premium is 0.00 (kept all premium)
-      // If it's a loss (SPX outside sell strikes), exit premium is max loss (5.00)
-      const exitPremium = isMaxProfit ? 0.0 : 5.0;
+      if (!isNaN(spxClose) && !isNaN(sellPut) && !isNaN(sellCall)) {
+        // For IC: If SPX is outside the short strikes, force the exit premium to 5.00 (max loss)
+        // If SPX is inside short strikes, force exit premium to 0 (win)
+        let autoExitPremium = 0;
+        if (spxClose < sellPut || spxClose > sellCall) {
+          autoExitPremium = 5.0;
+        }
 
-      setFormData((prev: typeof formData) => ({
+        // Only auto-set exit premium if custom exit is not used
+        if (!formData.useCustomExit) {
+          setFormData((prev) => ({
+            ...prev,
+            [field]: value,
+            exitPremium: autoExitPremium,
+            status: "CLOSED",
+          }));
+        } else {
+          setFormData((prev) => ({
+            ...prev,
+            [field]: value,
+            status: "CLOSED",
+          }));
+        }
+      } else {
+        setFormData((prev) => ({ ...prev, [field]: value }));
+      }
+    } else if (field === "useCustomExit") {
+      // If toggling custom exit option
+      if (value) {
+        // When enabling custom exit, set the customExitPremium field to the current exitPremium
+        const currentExitPremium = formData.exitPremium || "";
+        setFormData((prev) => ({
+          ...prev,
+          useCustomExit: value,
+          customExitPremium: String(currentExitPremium), // Ensure it's a string
+        }));
+      } else {
+        // When disabling custom exit, revert to auto calculation if SPX is set
+        const spxClose = parseFloat(String(formData.spxClosePrice));
+        const sellPut = parseFloat(String(formData.sellPut));
+        const sellCall = parseFloat(String(formData.sellCall));
+
+        let autoExitPremium = 0;
+        if (!isNaN(spxClose) && !isNaN(sellPut) && !isNaN(sellCall)) {
+          if (spxClose < sellPut || spxClose > sellCall) {
+            autoExitPremium = 5.0;
+          }
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          useCustomExit: value,
+          exitPremium: autoExitPremium,
+        }));
+      }
+    } else if (field === "customExitPremium" && formData.useCustomExit) {
+      // When changing custom exit premium, also update the actual exit premium
+      const exitValue = value === "" ? 0 : parseFloat(value);
+      setFormData((prev) => ({
         ...prev,
-        [field]: value,
-        exitPremium: exitPremium,
-        // Automatically set status to CLOSED when SPX close price is entered
-        status: "CLOSED",
+        customExitPremium: String(value), // Ensure it's a string
+        exitPremium: isNaN(exitValue) ? prev.exitPremium : exitValue,
       }));
     } else {
-      setFormData((prev: typeof formData) => ({
-        ...prev,
-        [field]: value,
-      }));
+      setFormData((prev) => ({ ...prev, [field]: value }));
     }
+
+    // Calculate PNL every time form data changes
+    const newFormData = { ...formData, [field]: value };
+    if (field === "customExitPremium" && formData.useCustomExit) {
+      const exitValue = value === "" ? 0 : parseFloat(value);
+      if (!isNaN(exitValue)) {
+        newFormData.exitPremium = exitValue;
+      }
+    }
+    const calculatedPnl = calculateTradePnl(newFormData);
+    setPnlForDisplay(calculatedPnl);
   };
 
   const handleSave = () => {
@@ -469,21 +523,6 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                 />
               </div>
 
-              {showExitPremiumInput && (
-                <div className="form-group">
-                  <label>Exit Premium</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.exitPremium ?? ""}
-                    onChange={(e) =>
-                      handleInputChange("exitPremium", e.target.value)
-                    }
-                    disabled={disableExitPremiumInputForClosed}
-                  />
-                </div>
-              )}
-
               {showSpxInput && (
                 <div className="form-group">
                   <label>SPX Close Price</label>
@@ -497,6 +536,62 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                     required={spxInputRequired}
                     disabled={disableSpxInputForClosed}
                   />
+                </div>
+              )}
+
+              {/* Close Early / Partial W/L Section */}
+              {(isNewTrade || isEditingOpenTrade) && (
+                <div className="form-section early-close-section">
+                  <h4>Close Early / Partial W/L</h4>
+                  <div className="form-group">
+                    <div className="checkbox-container">
+                      <input
+                        type="checkbox"
+                        id="useCustomExit"
+                        checked={formData.useCustomExit}
+                        onChange={(e) =>
+                          handleInputChange("useCustomExit", e.target.checked)
+                        }
+                      />
+                      <label htmlFor="useCustomExit">
+                        Use custom exit premium
+                      </label>
+                    </div>
+                    <div className="custom-exit-info">
+                      Default: 0.00 for wins, 5.00 for losses
+                    </div>
+                  </div>
+
+                  {formData.useCustomExit && (
+                    <div className="form-group">
+                      <label>Custom Exit Premium</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.customExitPremium}
+                        onChange={(e) =>
+                          handleInputChange("customExitPremium", e.target.value)
+                        }
+                        placeholder="Enter exit premium"
+                      />
+                      {formData.entryPremium > 0 &&
+                        formData.customExitPremium && (
+                          <div className="exit-premium-hint">
+                            {parseFloat(String(formData.customExitPremium)) >
+                            parseFloat(String(formData.entryPremium))
+                              ? `Loss: $${(
+                                  parseFloat(
+                                    String(formData.customExitPremium)
+                                  ) - parseFloat(String(formData.entryPremium))
+                                ).toFixed(2)} per contract`
+                              : `Saved: $${(
+                                  5.0 -
+                                  parseFloat(String(formData.customExitPremium))
+                                ).toFixed(2)} per contract from max loss`}
+                          </div>
+                        )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -624,7 +719,13 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             <div className="form-section mobile-pnl">
               <div className="pnl-display-mobile">
                 <span className="pnl-label">Calculated P&L:</span>
-                <span className={pnlForDisplay >= 0 ? "pnl-value positive" : "pnl-value negative"}>
+                <span
+                  className={
+                    pnlForDisplay >= 0
+                      ? "pnl-value positive"
+                      : "pnl-value negative"
+                  }
+                >
                   ${pnlForDisplay.toFixed(2)}
                 </span>
               </div>
@@ -646,4 +747,3 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
 };
 
 export default TradeForm;
-
