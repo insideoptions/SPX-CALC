@@ -495,86 +495,88 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
-  // Handle update trade - simplified version
+  // Handle update trade - FIXED VERSION
   const handleUpdateTrade = async (tradeData: Partial<Trade>) => {
-    console.log(
-      "%c ========= HANDLE UPDATE TRADE CALLED ========= ",
-      "background: blue; color: white; font-size: 16px"
-    );
-    console.log("Received trade data:", tradeData);
-
-    if (!currentTrade) {
-      console.error("ERROR: currentTrade is null or undefined");
-      return;
-    }
+    if (!currentTrade) return;
 
     try {
-      // Start loading and clear any previous errors
+      console.log("===== EDIT TRADE DEBUG =====");
+      console.log("Current trade:", currentTrade);
+      console.log("Current trade ID:", currentTrade.id);
+      console.log("Trade data received:", tradeData);
+      console.log("Trade data ID:", tradeData.id);
+
       setIsLoading(true);
       setError(null);
 
-      // SIMPLIFIED APPROACH: Create a direct merged object of current trade + changes
-      const updatedTrade: Trade = {
-        ...currentTrade, // Start with all current trade properties
-        ...tradeData, // Overwrite with any provided updates
-        id: currentTrade.id, // Always ensure ID is preserved
+      // Handle strikes properly - TradeForm sends strikes as individual properties
+      const strikes = {
+        sellPut: (tradeData as any).sellPut ?? currentTrade.strikes.sellPut,
+        buyPut:
+          (tradeData as any).buyPut ??
+          ((tradeData as any).sellPut
+            ? (tradeData as any).sellPut - 5
+            : currentTrade.strikes.buyPut),
+        sellCall: (tradeData as any).sellCall ?? currentTrade.strikes.sellCall,
+        buyCall:
+          (tradeData as any).buyCall ??
+          ((tradeData as any).sellCall
+            ? (tradeData as any).sellCall + 5
+            : currentTrade.strikes.buyCall),
       };
 
-      // Always make sure required fields are present
-      updatedTrade.userId = updatedTrade.userId || user?.id || "";
-      updatedTrade.userEmail = updatedTrade.userEmail || user?.email || "";
+      // Ensure ID is preserved and all required fields are present
+      const updatedTrade: Trade = {
+        ...currentTrade, // Start with all current trade data
+        ...tradeData, // Override with new data
+        id: currentTrade.id, // Ensure ID is preserved
+        strikes: strikes, // Use properly constructed strikes
+        userId: currentTrade.userId,
+        userEmail: currentTrade.userEmail,
+        isAutoPopulated: currentTrade.isAutoPopulated,
+      };
 
-      // Handle strikes properly
-      if (!updatedTrade.strikes) {
-        updatedTrade.strikes = {
-          sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
-          buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
-          sellCall:
-            (tradeData as any).sellCall || currentTrade.strikes.sellCall,
-          buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall,
-        };
+      // Handle optional fields more carefully
+      if (tradeData.exitPremium !== undefined) {
+        updatedTrade.exitPremium = tradeData.exitPremium;
+      }
+      if (tradeData.spxClosePrice !== undefined) {
+        updatedTrade.spxClosePrice = tradeData.spxClosePrice;
+      }
+      if (tradeData.pnl !== undefined) {
+        updatedTrade.pnl = tradeData.pnl;
+      }
+      if (tradeData.exitDate !== undefined) {
+        updatedTrade.exitDate = tradeData.exitDate;
+      }
+      if (tradeData.notes !== undefined) {
+        updatedTrade.notes = tradeData.notes;
+      }
+      if (tradeData.isMaxProfit !== undefined) {
+        updatedTrade.isMaxProfit = tradeData.isMaxProfit;
+      }
+      if (tradeData.seriesId !== undefined) {
+        updatedTrade.seriesId = tradeData.seriesId;
       }
 
-      // Debug logs to verify what will be sent
-      console.log("SIMPLIFIED UPDATE: Final trade to update:", updatedTrade);
-      console.log("Level being sent to API:", updatedTrade.level);
-      console.log("Original level for reference:", currentTrade.level);
-
       console.log("Final trade being sent to API:", updatedTrade);
-      console.log("Final exitPremium value:", updatedTrade.exitPremium);
 
       // Update in AWS
       const savedTrade = await updateTrade(updatedTrade);
       console.log("Response from AWS:", savedTrade);
-      console.log("Exit Premium in response:", savedTrade.exitPremium);
 
       if (savedTrade) {
-        console.log("Trade updated successfully - refreshing UI with new data");
-        console.log("Updated trade received from API:", savedTrade);
-        console.log("Level after update:", savedTrade.level);
-
-        // Force refresh the local trades state with the new data from the server
-        const updatedTrades = trades.map((t) => {
-          if (t.id === savedTrade.id) {
-            console.log(`Replacing trade ${t.id} with updated version`);
-            console.log(
-              `Old level: ${t.level}, New level: ${savedTrade.level}`
-            );
-            // Ensure we use the server-returned object completely
-            return savedTrade;
-          }
-          return t;
-        });
-
-        // Update state with our new trades array
-        setTrades(updatedTrades);
+        // Update local state
+        setTrades(trades.map((t) => (t.id === savedTrade.id ? savedTrade : t)));
         setLastSyncTime(new Date());
         setIsEditTradeModalOpen(false);
         setCurrentTrade(null);
 
-        // If there's a callback for trade updates, call it with the refreshed data
+        // If there's a callback for trade updates, call it
         if (onTradeUpdate) {
-          onTradeUpdate(updatedTrades);
+          onTradeUpdate(
+            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
+          );
         }
       } else {
         setError("Failed to update trade. Please try again.");
@@ -586,8 +588,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setIsLoading(false);
     }
   };
-
-  // The handleSaveClosedTrade function is now at line 131
 
   // Handle delete trade - IMPROVED ERROR HANDLING
   const handleDeleteTrade = async (trade: Trade) => {
@@ -1082,7 +1082,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
           }}
-          // isClosing prop removed as it's not for general editing
         />
       )}
 
