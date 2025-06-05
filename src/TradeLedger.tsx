@@ -541,8 +541,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
           tradeData.entryDate !== undefined
             ? tradeData.entryDate
             : currentTrade.entryDate,
-        level:
-          tradeData.level !== undefined ? tradeData.level : currentTrade.level,
+        // Always use the new level value from the form, don't do any conditional check
+        level: tradeData.level || currentTrade.level,
         contractQuantity:
           tradeData.contractQuantity !== undefined
             ? tradeData.contractQuantity
