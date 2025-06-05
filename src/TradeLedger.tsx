@@ -495,150 +495,50 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
-  // Handle update trade
+  // Handle update trade - simplified version
   const handleUpdateTrade = async (tradeData: Partial<Trade>) => {
-    if (!currentTrade) return;
+    console.log(
+      "%c ========= HANDLE UPDATE TRADE CALLED ========= ",
+      "background: blue; color: white; font-size: 16px"
+    );
+    console.log("Received trade data:", tradeData);
+
+    if (!currentTrade) {
+      console.error("ERROR: currentTrade is null or undefined");
+      return;
+    }
 
     try {
-      console.log("===== EDIT TRADE DEBUG =====");
-      console.log("Current trade:", currentTrade);
-      console.log("Current trade ID:", currentTrade.id);
-      console.log("Current trade level:", currentTrade.level);
-      console.log("Trade data received:", tradeData);
-      console.log("Trade data ID:", tradeData.id);
-      console.log("Trade level being updated:", tradeData.level);
-      console.log("Trade level type:", typeof tradeData.level);
-
+      // Start loading and clear any previous errors
       setIsLoading(true);
       setError(null);
 
-      // Extract strikes from tradeData if they exist
-      const strikes = tradeData.strikes || {
-        sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
-        buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
-        sellCall: (tradeData as any).sellCall || currentTrade.strikes.sellCall,
-        buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall,
-      };
-
-      // Ensure ID is preserved and all required fields are present
+      // SIMPLIFIED APPROACH: Create a direct merged object of current trade + changes
       const updatedTrade: Trade = {
-        id: currentTrade.id,
-        // Use explicit undefined checking for all fields instead of || operator
-        // This prevents issues with falsey values like 0, empty strings, etc.
-        userId:
-          currentTrade.userId !== undefined
-            ? currentTrade.userId
-            : user?.id || "",
-        userEmail:
-          currentTrade.userEmail !== undefined
-            ? currentTrade.userEmail
-            : user?.email || "",
-        tradeDate:
-          tradeData.tradeDate !== undefined
-            ? tradeData.tradeDate
-            : currentTrade.tradeDate,
-        entryDate:
-          tradeData.entryDate !== undefined
-            ? tradeData.entryDate
-            : currentTrade.entryDate,
-        // Always use the new level value from the form, don't do any conditional check
-        level: tradeData.level || currentTrade.level,
-        contractQuantity:
-          tradeData.contractQuantity !== undefined
-            ? tradeData.contractQuantity
-            : currentTrade.contractQuantity,
-        entryPremium:
-          tradeData.entryPremium !== undefined
-            ? tradeData.entryPremium
-            : currentTrade.entryPremium,
-        tradeType:
-          tradeData.tradeType !== undefined
-            ? tradeData.tradeType
-            : currentTrade.tradeType,
-        strikes: strikes,
-        status:
-          tradeData.status !== undefined
-            ? tradeData.status
-            : currentTrade.status,
-        fees: tradeData.fees !== undefined ? tradeData.fees : currentTrade.fees,
-        isAutoPopulated: currentTrade.isAutoPopulated,
-        matrix:
-          tradeData.matrix !== undefined
-            ? tradeData.matrix
-            : currentTrade.matrix,
-        buyingPower:
-          tradeData.buyingPower !== undefined
-            ? tradeData.buyingPower
-            : currentTrade.buyingPower,
+        ...currentTrade, // Start with all current trade properties
+        ...tradeData, // Overwrite with any provided updates
+        id: currentTrade.id, // Always ensure ID is preserved
       };
 
-      // Add optional fields if they exist
-      // Handle exitPremium more carefully to prevent loss of data
-      // tradeData.exitPremium could be 0, which is a valid value but evaluates as falsy
-      if (tradeData.exitPremium !== undefined) {
-        updatedTrade.exitPremium = tradeData.exitPremium;
-        console.log(
-          "Setting exitPremium from tradeData:",
-          tradeData.exitPremium
-        );
-      } else if (currentTrade.exitPremium !== undefined) {
-        updatedTrade.exitPremium = currentTrade.exitPremium;
-        console.log(
-          "Setting exitPremium from currentTrade:",
-          currentTrade.exitPremium
-        );
-      }
-      // Handle exitDate with proper undefined checking
-      if (
-        tradeData.exitDate !== undefined ||
-        currentTrade.exitDate !== undefined
-      ) {
-        updatedTrade.exitDate =
-          tradeData.exitDate !== undefined
-            ? tradeData.exitDate
-            : currentTrade.exitDate;
-      }
-      if (tradeData.pnl !== undefined || currentTrade.pnl !== undefined) {
-        updatedTrade.pnl =
-          tradeData.pnl !== undefined ? tradeData.pnl : currentTrade.pnl;
-      }
-      // Handle notes with proper undefined checking
-      if (tradeData.notes !== undefined || currentTrade.notes !== undefined) {
-        updatedTrade.notes =
-          tradeData.notes !== undefined ? tradeData.notes : currentTrade.notes;
-      }
-      // Handle spxClosePrice carefully
-      if (tradeData.spxClosePrice !== undefined) {
-        updatedTrade.spxClosePrice = tradeData.spxClosePrice;
-      } else if (currentTrade.spxClosePrice !== undefined) {
-        updatedTrade.spxClosePrice = currentTrade.spxClosePrice;
+      // Always make sure required fields are present
+      updatedTrade.userId = updatedTrade.userId || user?.id || "";
+      updatedTrade.userEmail = updatedTrade.userEmail || user?.email || "";
+
+      // Handle strikes properly
+      if (!updatedTrade.strikes) {
+        updatedTrade.strikes = {
+          sellPut: (tradeData as any).sellPut || currentTrade.strikes.sellPut,
+          buyPut: (tradeData as any).buyPut || currentTrade.strikes.buyPut,
+          sellCall:
+            (tradeData as any).sellCall || currentTrade.strikes.sellCall,
+          buyCall: (tradeData as any).buyCall || currentTrade.strikes.buyCall,
+        };
       }
 
-      // Debug log to help troubleshoot exit premium issues
-      console.log("Updating trade with:", {
-        exitPremium: updatedTrade.exitPremium,
-        originalExitPremium: currentTrade.exitPremium,
-        newExitPremium: tradeData.exitPremium,
-      });
-      if (
-        tradeData.isMaxProfit !== undefined ||
-        currentTrade.isMaxProfit !== undefined
-      ) {
-        updatedTrade.isMaxProfit =
-          tradeData.isMaxProfit !== undefined
-            ? tradeData.isMaxProfit
-            : currentTrade.isMaxProfit;
-      }
-      // Handle seriesId with proper undefined checking
-      if (
-        tradeData.seriesId !== undefined ||
-        currentTrade.seriesId !== undefined
-      ) {
-        updatedTrade.seriesId =
-          tradeData.seriesId !== undefined
-            ? tradeData.seriesId
-            : currentTrade.seriesId;
-      }
+      // Debug logs to verify what will be sent
+      console.log("SIMPLIFIED UPDATE: Final trade to update:", updatedTrade);
+      console.log("Level being sent to API:", updatedTrade.level);
+      console.log("Original level for reference:", currentTrade.level);
 
       console.log("Final trade being sent to API:", updatedTrade);
       console.log("Final exitPremium value:", updatedTrade.exitPremium);
