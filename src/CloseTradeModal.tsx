@@ -28,19 +28,49 @@ const CloseTradeModal: React.FC<CloseTradeModalProps> = ({
       const premium = trade.entryPremium;
       const contracts = trade.contractQuantity;
       const fees = trade.fees;
-      const spreadWidth = 5; // Assuming 5-point wide spreads as per requirement
+      const spreadWidth = 5; // 5-point wide spreads
+
+      // Use either the nested strikes object or top-level properties
+      const buyPut = trade.buyPut || sellPut - 5;
+      const buyCall = trade.buyCall || sellCall + 5;
 
       let pnl = 0;
-      const isWin = spx > sellPut && spx < sellCall;
 
-      if (isWin) {
+      // Full win: SPX between the short strikes
+      if (spx >= sellPut && spx <= sellCall) {
+        // Full profit: premium collected minus fees
         pnl = premium * 100 * contracts - fees;
-      } else {
-        // Max loss for an iron condor is spread width - premium collected
+      }
+      // Full loss: SPX at or beyond long strikes
+      else if (spx <= buyPut || spx >= buyCall) {
+        // Max loss: (spread width - premium collected) * contract size
         const maxLossPerContract = (spreadWidth - premium) * 100;
         pnl = -(maxLossPerContract * contracts) - fees;
       }
-      setCalculatedPnl(pnl);
+      // Partial loss on put side
+      else if (spx < sellPut && spx > buyPut) {
+        // Calculate how far into the spread we are
+        const intrusion = sellPut - spx;
+        const lossPercentage = intrusion / spreadWidth;
+        // Partial loss: portion of max loss based on how far SPX breached the short strike
+        const partialLossPerContract = lossPercentage * spreadWidth * 100;
+        // P&L: premium collected - partial loss
+        pnl =
+          premium * 100 * contracts - partialLossPerContract * contracts - fees;
+      }
+      // Partial loss on call side
+      else if (spx > sellCall && spx < buyCall) {
+        // Calculate how far into the spread we are
+        const intrusion = spx - sellCall;
+        const lossPercentage = intrusion / spreadWidth;
+        // Partial loss: portion of max loss based on how far SPX breached the short strike
+        const partialLossPerContract = lossPercentage * spreadWidth * 100;
+        // P&L: premium collected - partial loss
+        pnl =
+          premium * 100 * contracts - partialLossPerContract * contracts - fees;
+      }
+
+      setCalculatedPnl(parseFloat(pnl.toFixed(2)));
     } else {
       setCalculatedPnl(null);
     }
@@ -52,14 +82,51 @@ const CloseTradeModal: React.FC<CloseTradeModalProps> = ({
       return;
     }
 
+    // Calculate exit premium based on the outcome of the trade
+    // For Iron Condors, handle full wins, full losses, and partial losses
+    let exitPremium = 0;
+    if (trade && trade.tradeType === "IRON_CONDOR") {
+      const spx = Number(spxClosePrice);
+      const sellPut = trade.strikes.sellPut;
+      const sellCall = trade.strikes.sellCall;
+
+      // Use either the nested strikes object or top-level properties
+      // Standard 5-point wide spreads
+      const buyPut = trade.buyPut || sellPut - 5;
+      const buyCall = trade.buyCall || sellCall + 5;
+
+      const spreadWidth = 5; // 5-point wide spreads
+
+      // Full win: SPX between the short strikes
+      if (spx >= sellPut && spx <= sellCall) {
+        exitPremium = 0; // Full win
+      }
+      // Full loss: SPX at or beyond long strikes
+      else if (spx <= buyPut || spx >= buyCall) {
+        exitPremium = spreadWidth; // Full loss = width of spread
+      }
+      // Partial loss on put side
+      else if (spx < sellPut && spx > buyPut) {
+        // Calculate how far into the spread we are as a percentage
+        const intrusion = sellPut - spx;
+        const partialLoss = (intrusion / spreadWidth) * spreadWidth;
+        exitPremium = parseFloat(partialLoss.toFixed(2)); // Round to 2 decimal places
+      }
+      // Partial loss on call side
+      else if (spx > sellCall && spx < buyCall) {
+        const intrusion = spx - sellCall;
+        const partialLoss = (intrusion / spreadWidth) * spreadWidth;
+        exitPremium = parseFloat(partialLoss.toFixed(2)); // Round to 2 decimal places
+      }
+    }
+
     const updatedTradeData: Partial<Trade> = {
       id: trade.id, // Important: ensure ID is passed for update
       spxClosePrice: Number(spxClosePrice),
       exitDate: exitDate,
       pnl: calculatedPnl,
       status: "CLOSED",
-      // Potentially set exitPremium to 0 or some other convention for closed trades
-      // exitPremium: 0,
+      exitPremium: exitPremium,
     };
     onSave(updatedTradeData);
   };
