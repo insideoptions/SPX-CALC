@@ -6,9 +6,9 @@ interface BaseMatrixRow {
   buyingPower: string;
   level1: string | number;
   level2: string | number;
-  level3: number;
-  level4: number;
-  level5: number;
+  level3: string | number;
+  level4: string | number;
+  level5: string | number;
 }
 
 interface ShiftedMatrixRow extends BaseMatrixRow {
@@ -119,7 +119,7 @@ const SpxMatrixUser: React.FC = () => {
         subtitle:
           "Starts trading after 2 Consecutive Outside Day\nLevel 2 Quantity was added to Level 3",
         description:
-          "(Only if instructed by David) This will potentially increase our profit by (Skip/No trade Level 2) trade alert pass and waiting for (Level 3) alert the next day. If a level 3 alert occurs, we can combine the trade sizes from both levels for a potentially bigger win. This approach avoids any potential losses from level 2 trade since we never placed it.",
+          "(Only if instructed by David) This will potentially increase our profit by (Skip/No trade Level 2) trade alert pass and waiting for (Level 3) alert the next day. If a level 3 alert occurs, we can combine the trade sizes from both levels for a potentially bigger win. This approach avoids any potential losses from level 2 trade since we never placed it.\nExample: Using $26,350 Buying Power (The difference between a Level 2 Start Matrix versus Stacked Matrix)\n- Level 2:  alert will become a Skip/No trade if posted.\n- Level 3:  Level 2 (1qty) is added to Level 3 (5 qty), your Level 3 would be (6 qty)\n- Level 4 and 5 stay the same",
         data: [
           {
             buyingPower: "$11,800",
@@ -184,24 +184,24 @@ const SpxMatrixUser: React.FC = () => {
         subtitle:
           "Starts trading after 2 Consecutive Outside Day\nThis Matrix is Sized for 6 Levels, our level 2 quantity becomes level 3 and so forth",
         description:
-          "(Only if instructed by David) This matrix is designed using 6 Levels, allowing us to use the same buying power by adding a level and shifting each level over.",
+          "Shifted Matrix: (Only if instructed by David) This matrix is designed using 6 Levels, allowing us to use the same buying power by adding a level and shifting each level over.\nNote: If you are trading the $11,800 or $16,300 Buying Power Matrix you will skip/no trade level 3 alert\nExample: Using $26,350 (The difference between the Level 2 Start Matrix versus Shifted Matrix)\n- Level 2 alert will become a skip/no trade if posted.\n- If a Level 3 alert is posted you would trade level 2 qty on level 3 (1 qty)\n- Level 3 qty is traded on Level 4 (5 qty)\n- Level 4 qty is traded on Level 5 (17 qty)\n- Level 5 qty is traded on Level 6 (53 qty)",
         data: [
           {
             buyingPower: "$11,800",
             level1: "Skip / No Trade",
             level2: "Skip / No Trade",
-            level3: 2,
-            level4: 8,
-            level5: 24,
+            level3: "Skip / No Trade",
+            level4: 2,
+            level5: 8,
             level6: 24,
           },
           {
             buyingPower: "$16,300",
             level1: "Skip / No Trade",
             level2: "Skip / No Trade",
-            level3: 3,
-            level4: 11,
-            level5: 33,
+            level3: "Skip / No Trade",
+            level4: 3,
+            level5: 11,
             level6: 33,
           },
           {
@@ -269,18 +269,49 @@ const SpxMatrixUser: React.FC = () => {
     <div className="card">
       <h3 className="section-title">Select Your Trading Matrix</h3>
       <div className="matrix-selector-grid">
-        {Object.entries(matrixData.matrices).map(([key, matrix]) => (
-          <button
-            key={key}
-            onClick={() => setSelectedMatrix(key)}
-            className={`matrix-selector-button ${
-              selectedMatrix === key ? "active" : ""
-            }`}
-          >
-            <h4 className="matrix-selector-title">{matrix.title}</h4>
-            <p className="matrix-selector-subtitle">{matrix.subtitle}</p>
-          </button>
-        ))}
+        <div
+          key="level2Start"
+          onClick={() => setSelectedMatrix("level2Start")}
+          className={`matrix-selector-button ${
+            selectedMatrix === "level2Start" ? "active" : ""
+          }`}
+        >
+          <h4 className="matrix-selector-title">
+            LEVEL 2 START MATRIX (Standard Matrix)
+          </h4>
+          <p className="matrix-selector-subtitle">
+            Starts trading after 1 Outside Day
+            <br />
+            Expected to trade 6-9 times/month
+          </p>
+        </div>
+
+        <div
+          key="stacked"
+          onClick={() => setSelectedMatrix("stacked")}
+          className={`matrix-selector-button ${
+            selectedMatrix === "stacked" ? "active" : ""
+          }`}
+        >
+          <h4 className="matrix-selector-title">STACKED MATRIX</h4>
+          <p className="matrix-selector-subtitle">
+            Only if instructed by David - combines trade sizes for potentially
+            bigger wins
+          </p>
+        </div>
+
+        <div
+          key="shifted"
+          onClick={() => setSelectedMatrix("shifted")}
+          className={`matrix-selector-button ${
+            selectedMatrix === "shifted" ? "active" : ""
+          }`}
+        >
+          <h4 className="matrix-selector-title">SHIFTED MATRIX</h4>
+          <p className="matrix-selector-subtitle">
+            Alternative matrix configuration
+          </p>
+        </div>
       </div>
     </div>
   );
