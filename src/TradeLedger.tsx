@@ -256,9 +256,63 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     };
   };
 
+  // Calculate exit premium for a trade based on SPX close price
+  const calculateExitPremium = (trade: Trade): number | undefined => {
+    if (trade.tradeType !== "IRON_CONDOR" || !trade.spxClosePrice)
+      return undefined;
+
+    const spx = trade.spxClosePrice;
+    const sellPut = trade.strikes.sellPut;
+    const sellCall = trade.strikes.sellCall;
+    const buyPut = trade.buyPut || sellPut - 5;
+    const buyCall = trade.buyCall || sellCall + 5;
+    const spreadWidth = 5;
+
+    // Full win: SPX between the short strikes
+    if (spx >= sellPut && spx <= sellCall) {
+      return 0;
+    }
+    // Full loss: SPX at or beyond long strikes
+    else if (spx <= buyPut || spx >= buyCall) {
+      return spreadWidth;
+    }
+    // Partial loss on put side
+    else if (spx < sellPut && spx > buyPut) {
+      const intrusion = sellPut - spx;
+      return parseFloat(((intrusion / spreadWidth) * spreadWidth).toFixed(2));
+    }
+    // Partial loss on call side
+    else if (spx > sellCall && spx < buyCall) {
+      const intrusion = spx - sellCall;
+      return parseFloat(((intrusion / spreadWidth) * spreadWidth).toFixed(2));
+    }
+
+    return undefined;
+  };
+
   // Apply filters and sorting
   const getFilteredAndSortedTrades = () => {
-    let filtered = [...trades];
+    // First ensure all closed trades have exit premiums calculated
+    const tradesWithExitPremiums = trades.map((trade) => {
+      // Only process CLOSED trades that are missing exitPremium
+      if (trade.status !== "CLOSED") return trade;
+      if (trade.exitPremium !== undefined && trade.exitPremium !== null)
+        return trade;
+
+      // Calculate exit premium if missing
+      const exitPremium = calculateExitPremium(trade);
+      if (exitPremium !== undefined) {
+        console.log(
+          `Calculated exit premium for trade ${trade.id}: ${exitPremium}`
+        );
+        return { ...trade, exitPremium };
+      }
+
+      return trade;
+    });
+
+    // We'll use the trades with calculated exit premiums for all operations now
+    let filtered = [...tradesWithExitPremiums];
 
     // Apply filter
     if (filterType !== "All Trades") {
@@ -758,10 +812,28 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       <td>{trade.strikes.sellCall}</td>
                       <td>{trade.entryPremium.toFixed(2)}</td>
                       <td>
-                        {trade.exitPremium !== undefined &&
-                        trade.exitPremium !== null
-                          ? trade.exitPremium.toFixed(2)
-                          : "0.00"}
+                        {(() => {
+                          // If we have an exit premium, show it
+                          if (
+                            trade.exitPremium !== undefined &&
+                            trade.exitPremium !== null
+                          ) {
+                            return trade.exitPremium.toFixed(2);
+                          }
+                          // If trade is closed and has SPX close price, calculate exit premium on the fly
+                          else if (
+                            trade.status === "CLOSED" &&
+                            trade.spxClosePrice
+                          ) {
+                            const calculatedExitPrem =
+                              calculateExitPremium(trade);
+                            return calculatedExitPrem !== undefined
+                              ? calculatedExitPrem.toFixed(2)
+                              : "0.00";
+                          }
+                          // Default case
+                          return "0.00";
+                        })()}
                       </td>
                       <td
                         className={`spx-close ${
@@ -920,10 +992,28 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       <div className="trade-card-row">
                         <span className="trade-card-label">Exit:</span>
                         <span className="trade-card-value">
-                          {trade.exitPremium !== undefined &&
-                          trade.exitPremium !== null
-                            ? trade.exitPremium.toFixed(2)
-                            : "0.00"}
+                          {(() => {
+                            // If we have an exit premium, show it
+                            if (
+                              trade.exitPremium !== undefined &&
+                              trade.exitPremium !== null
+                            ) {
+                              return trade.exitPremium.toFixed(2);
+                            }
+                            // If trade is closed and has SPX close price, calculate exit premium on the fly
+                            else if (
+                              trade.status === "CLOSED" &&
+                              trade.spxClosePrice
+                            ) {
+                              const calculatedExitPrem =
+                                calculateExitPremium(trade);
+                              return calculatedExitPrem !== undefined
+                                ? calculatedExitPrem.toFixed(2)
+                                : "0.00";
+                            }
+                            // Default case
+                            return "0.00";
+                          })()}
                         </span>
                       </div>
                     )}
