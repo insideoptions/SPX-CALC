@@ -124,16 +124,26 @@
 
 @media (min-width: 768px) {
   .strikes-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
   }
 }
 
 .form-group label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
+  display: block;
   margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.strike-info {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.5rem;
+  padding: 5px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  text-align: center;
 }
 
 .form-group input,

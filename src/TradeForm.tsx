@@ -21,11 +21,10 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     contractQuantity: trade?.contractQuantity || 1,
     entryPremium: trade?.entryPremium || 0,
     exitPremium: trade?.exitPremium || 0,
-    tradeType: trade?.tradeType || ("IRON_CONDOR" as const),
+    // Always use IRON_CONDOR as trade type
+    tradeType: "IRON_CONDOR" as const,
     sellPut: trade?.strikes?.sellPut || 0,
-    buyPut: trade?.strikes?.buyPut || 0,
     sellCall: trade?.strikes?.sellCall || 0,
-    buyCall: trade?.strikes?.buyCall || 0,
     fees: trade?.fees || 6.56,
     notes: trade?.notes || "",
     matrix: trade?.matrix || "standard",
@@ -40,7 +39,6 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     currentFormData: typeof formData
   ): number | null => {
     const {
-      tradeType,
       spxClosePrice: spxClosePriceInput,
       sellPut: sellPutInput,
       sellCall: sellCallInput,
@@ -61,7 +59,6 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     const spreadWidth = 5; // Assuming 5-point wide spreads for Iron Condors
 
     if (
-      tradeType === "IRON_CONDOR" &&
       !isNaN(spxClosePrice) &&
       String(spxClosePriceInput).trim() !== ""
     ) {
@@ -125,7 +122,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         // If SPX is inside short strikes, force exit premium to 0 (win)
         let autoExitPremium = 0;
         if (spxClose < sellPut || spxClose > sellCall) {
-          autoExitPremium = 5.0;
+          autoExitPremium = 5.00;
         }
 
         // Only auto-set exit premium if custom exit is not used
@@ -161,11 +158,11 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         const spxClose = parseFloat(String(formData.spxClosePrice));
         const sellPut = parseFloat(String(formData.sellPut));
         const sellCall = parseFloat(String(formData.sellCall));
-
+        
         let autoExitPremium = 0;
         if (!isNaN(spxClose) && !isNaN(sellPut) && !isNaN(sellCall)) {
           if (spxClose < sellPut || spxClose > sellCall) {
-            autoExitPremium = 5.0;
+            autoExitPremium = 5.00;
           }
         }
 
@@ -211,8 +208,11 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
       return isNaN(num) || String(val).trim() === "" ? undefined : num;
     };
 
+    // For debugging purposes
+    console.log("TradeForm.handleSave: trade ID being used:", trade?.id);
+    
     let tradeDataToSave: Partial<Trade> = {
-      id: trade?.id,
+      id: trade?.id, // Preserve ID for edits
       userId: user?.id || "",
       userEmail: user?.email || "",
       tradeDate: formData.tradeDate,
@@ -227,24 +227,29 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         trade?.entryPremium ??
         0,
       tradeType: formData.tradeType,
-      strikes: {
-        sellPut:
-          parseToNumberOrUndefined(formData.sellPut) ??
-          trade?.strikes?.sellPut ??
-          0,
-        buyPut:
-          parseToNumberOrUndefined(formData.buyPut) ??
-          trade?.strikes?.buyPut ??
-          0,
-        sellCall:
-          parseToNumberOrUndefined(formData.sellCall) ??
-          trade?.strikes?.sellCall ??
-          0,
-        buyCall:
-          parseToNumberOrUndefined(formData.buyCall) ??
-          trade?.strikes?.buyCall ??
-          0,
-      },
+        // Calculate the buy strikes automatically based on the 5-point wide spread rule
+        strikes: {
+          sellPut:
+            parseToNumberOrUndefined(formData.sellPut) ??
+            trade?.strikes?.sellPut ??
+            0,
+          buyPut:
+            parseToNumberOrUndefined(formData.sellPut) !== undefined
+              ? parseToNumberOrUndefined(formData.sellPut)! - 5
+              : trade?.strikes?.sellPut !== undefined
+              ? trade?.strikes?.sellPut - 5
+              : 0,
+          sellCall:
+            parseToNumberOrUndefined(formData.sellCall) ??
+            trade?.strikes?.sellCall ??
+            0,
+          buyCall:
+            parseToNumberOrUndefined(formData.sellCall) !== undefined
+              ? parseToNumberOrUndefined(formData.sellCall)! + 5
+              : trade?.strikes?.sellCall !== undefined
+              ? trade?.strikes?.sellCall + 5
+              : 0,
+        },
       fees: parseToNumberOrUndefined(formData.fees) ?? trade?.fees ?? 0,
       notes: formData.notes,
       matrix: formData.matrix,
@@ -308,7 +313,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         tradeDataToSave.status = "CLOSED";
         tradeDataToSave.exitDate =
           trade.exitDate || new Date().toISOString().split("T")[0];
-
+          
         // Handle custom exit premium when editing closed trades
         if (formData.useCustomExit && formData.customExitPremium) {
           const customExit = parseFloat(String(formData.customExitPremium));
@@ -321,7 +326,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             tradeDataToSave.pnl = (ep - customExit) * cq * 100 - f;
           }
         }
-
+        
         if (formData.tradeType === "IRON_CONDOR") {
           if (currentSpxClosePrice !== undefined) {
             tradeDataToSave.spxClosePrice = currentSpxClosePrice;
@@ -450,7 +455,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
       <div className="trade-form-container">
         <div className="trade-form-header">
           <h3>
-            {trade ? "Edit Trade" : "Add New Trade"} ({formData.tradeType})
+            {trade ? "Edit Trade" : "Add New Trade"}
           </h3>
           <button onClick={onCancel} className="cancel-button">
             &times;
@@ -490,17 +495,12 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
               </div>
               <div className="form-group">
                 <label>Trade Type</label>
-                <select
-                  value={formData.tradeType}
-                  onChange={(e) =>
-                    handleInputChange("tradeType", e.target.value)
-                  }
-                  disabled={disableCoreTradeDetails}
-                >
-                  <option value="IRON_CONDOR">Iron Condor</option>
-                  <option value="PUT_SPREAD">Put Spread</option>
-                  <option value="CALL_SPREAD">Call Spread</option>
-                </select>
+                <input 
+                  type="text" 
+                  value="IRON CONDOR" 
+                  disabled={true}
+                  readOnly
+                />
               </div>
             </div>
           </div>
@@ -551,7 +551,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                   />
                 </div>
               )}
-
+              
               {/* Close Early / Partial W/L Section - Always show for editing */}
               {(isNewTrade || trade) && (
                 <div className="form-section early-close-section">
@@ -562,19 +562,17 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                         type="checkbox"
                         id="useCustomExit"
                         checked={formData.useCustomExit}
-                        onChange={(e) =>
+                        onChange={(e) => 
                           handleInputChange("useCustomExit", e.target.checked)
                         }
                       />
-                      <label htmlFor="useCustomExit">
-                        Use custom exit premium
-                      </label>
+                      <label htmlFor="useCustomExit">Use custom exit premium</label>
                     </div>
                     <div className="custom-exit-info">
                       Default: 0.00 for wins, 5.00 for losses
                     </div>
                   </div>
-
+                  
                   {formData.useCustomExit && (
                     <div className="form-group">
                       <label>Custom Exit Premium</label>
@@ -587,22 +585,13 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                         }
                         placeholder="Enter exit premium"
                       />
-                      {formData.entryPremium > 0 &&
-                        formData.customExitPremium && (
-                          <div className="exit-premium-hint">
-                            {parseFloat(String(formData.customExitPremium)) >
-                            parseFloat(String(formData.entryPremium))
-                              ? `Loss: $${(
-                                  parseFloat(
-                                    String(formData.customExitPremium)
-                                  ) - parseFloat(String(formData.entryPremium))
-                                ).toFixed(2)} per contract`
-                              : `Saved: $${(
-                                  5.0 -
-                                  parseFloat(String(formData.customExitPremium))
-                                ).toFixed(2)} per contract from max loss`}
-                          </div>
-                        )}
+                      {formData.entryPremium > 0 && formData.customExitPremium && (
+                        <div className="exit-premium-hint">
+                          {parseFloat(String(formData.customExitPremium)) > parseFloat(String(formData.entryPremium))
+                            ? `Loss: $${(parseFloat(String(formData.customExitPremium)) - parseFloat(String(formData.entryPremium))).toFixed(2)} per contract`
+                            : `Saved: $${(5.00 - parseFloat(String(formData.customExitPremium))).toFixed(2)} per contract from max loss`}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -635,61 +624,41 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             </div>
           </div>
 
-          {formData.tradeType === "IRON_CONDOR" && (
-            <div className="form-section">
-              <h4>Strikes (Iron Condor)</h4>
-              <div className="form-grid strikes-grid">
-                <div className="form-group">
-                  <label>Sell Put</label>
-                  <input
-                    type="number"
-                    value={formData.sellPut ?? ""}
-                    onChange={(e) =>
-                      handleInputChange("sellPut", e.target.value)
-                    }
-                    disabled={disableCoreTradeDetails}
-                    required
-                  />
+          <div className="form-section">
+            <h4>Strikes (Iron Condor)</h4>
+            <div className="form-grid strikes-grid">
+              <div className="form-group">
+                <label>Sell Put</label>
+                <input
+                  type="number"
+                  value={formData.sellPut ?? ""}
+                  onChange={(e) =>
+                    handleInputChange("sellPut", e.target.value)
+                  }
+                  disabled={disableCoreTradeDetails}
+                  required
+                />
+                <div className="strike-info">
+                  Buy Put: {formData.sellPut ? Number(formData.sellPut) - 5 : "--"}
                 </div>
-                <div className="form-group">
-                  <label>Buy Put</label>
-                  <input
-                    type="number"
-                    value={formData.buyPut ?? ""}
-                    onChange={(e) =>
-                      handleInputChange("buyPut", e.target.value)
-                    }
-                    disabled={disableCoreTradeDetails}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Sell Call</label>
-                  <input
-                    type="number"
-                    value={formData.sellCall ?? ""}
-                    onChange={(e) =>
-                      handleInputChange("sellCall", e.target.value)
-                    }
-                    disabled={disableCoreTradeDetails}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Buy Call</label>
-                  <input
-                    type="number"
-                    value={formData.buyCall ?? ""}
-                    onChange={(e) =>
-                      handleInputChange("buyCall", e.target.value)
-                    }
-                    disabled={disableCoreTradeDetails}
-                    required
-                  />
+              </div>
+              <div className="form-group">
+                <label>Sell Call</label>
+                <input
+                  type="number"
+                  value={formData.sellCall ?? ""}
+                  onChange={(e) =>
+                    handleInputChange("sellCall", e.target.value)
+                  }
+                  disabled={disableCoreTradeDetails}
+                  required
+                />
+                <div className="strike-info">
+                  Buy Call: {formData.sellCall ? Number(formData.sellCall) + 5 : "--"}
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
           <div className="form-section">
             <h4>Additional Information</h4>
@@ -735,13 +704,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             <div className="form-section mobile-pnl">
               <div className="pnl-display-mobile">
                 <span className="pnl-label">Calculated P&L:</span>
-                <span
-                  className={
-                    pnlForDisplay >= 0
-                      ? "pnl-value positive"
-                      : "pnl-value negative"
-                  }
-                >
+                <span className={pnlForDisplay >= 0 ? "pnl-value positive" : "pnl-value negative"}>
                   ${pnlForDisplay.toFixed(2)}
                 </span>
               </div>
