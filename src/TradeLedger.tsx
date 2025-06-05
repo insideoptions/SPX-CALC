@@ -717,7 +717,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       <td>{trade.strikes.sellPut}</td>
                       <td>{trade.strikes.sellCall}</td>
                       <td>{trade.entryPremium.toFixed(2)}</td>
-                      <td>{trade.exitPremium?.toFixed(2) || "0.00"}</td>
+                      <td>
+                        {trade.exitPremium !== undefined &&
+                        trade.exitPremium !== null
+                          ? trade.exitPremium.toFixed(2)
+                          : "0.00"}
+                      </td>
                       <td
                         className={`spx-close ${
                           trade.spxClosePrice &&
@@ -871,11 +876,14 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         {trade.entryPremium.toFixed(2)}
                       </span>
                     </div>
-                    {trade.exitPremium !== undefined && (
+                    {trade.status === "CLOSED" && (
                       <div className="trade-card-row">
                         <span className="trade-card-label">Exit:</span>
                         <span className="trade-card-value">
-                          {trade.exitPremium.toFixed(2)}
+                          {trade.exitPremium !== undefined &&
+                          trade.exitPremium !== null
+                            ? trade.exitPremium.toFixed(2)
+                            : "0.00"}
                         </span>
                       </div>
                     )}
