@@ -683,12 +683,15 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             <div className="form-grid">
               <div className="form-group">
                 <label>Matrix</label>
-                <input
-                  type="text"
-                  value={formData.matrix ?? ""}
+                <select
+                  value={formData.matrix}
                   onChange={(e) => handleInputChange("matrix", e.target.value)}
                   disabled={disableCoreTradeDetails && !isNewTrade}
-                />
+                >
+                  <option value="standard">Standard Matrix</option>
+                  <option value="shifted">Shifted Matrix</option>
+                  <option value="stacked">Stacked Matrix</option>
+                </select>
               </div>
               <div className="form-group">
                 <label>Buying Power</label>
