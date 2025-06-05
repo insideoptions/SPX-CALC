@@ -309,6 +309,19 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         tradeDataToSave.exitDate =
           trade.exitDate || new Date().toISOString().split("T")[0];
 
+        // Handle custom exit premium when editing closed trades
+        if (formData.useCustomExit && formData.customExitPremium) {
+          const customExit = parseFloat(String(formData.customExitPremium));
+          if (!isNaN(customExit)) {
+            tradeDataToSave.exitPremium = customExit;
+            // Calculate PNL based on custom exit premium
+            const ep = tradeDataToSave.entryPremium ?? 0;
+            const cq = tradeDataToSave.contractQuantity ?? 0;
+            const f = tradeDataToSave.fees ?? 0;
+            tradeDataToSave.pnl = (ep - customExit) * cq * 100 - f;
+          }
+        }
+
         if (formData.tradeType === "IRON_CONDOR") {
           if (currentSpxClosePrice !== undefined) {
             tradeDataToSave.spxClosePrice = currentSpxClosePrice;
@@ -539,8 +552,8 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                 </div>
               )}
 
-              {/* Close Early / Partial W/L Section */}
-              {(isNewTrade || isEditingOpenTrade) && (
+              {/* Close Early / Partial W/L Section - Always show for editing */}
+              {(isNewTrade || trade) && (
                 <div className="form-section early-close-section">
                   <h4>Close Early / Partial W/L</h4>
                   <div className="form-group">
