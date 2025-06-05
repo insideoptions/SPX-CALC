@@ -620,16 +620,29 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             </div>
           </div>
 
+          {pnlForDisplay !== null && (
+            <div className="form-section mobile-pnl">
+              <div className="pnl-display-mobile">
+                <span className="pnl-label">Calculated P&L:</span>
+                <span
+                  className={
+                    pnlForDisplay >= 0
+                      ? "pnl-value positive"
+                      : "pnl-value negative"
+                  }
+                >
+                  ${pnlForDisplay.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="form-actions">
-            <button type="button" onClick={handleSave} className="save-button">
-              {trade ? "Save Changes" : "Add Trade"}
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="cancel-button-form"
-            >
+            <button className="cancel-button" onClick={onCancel}>
               Cancel
+            </button>
+            <button className="save-button" onClick={handleSave}>
+              Save
             </button>
           </div>
         </div>
