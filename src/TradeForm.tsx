@@ -424,13 +424,13 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     }
   }
 
-  const disableCoreTradeDetails = isEditingClosedTrade;
+  // Allow editing all fields regardless of trade status to correct mistakes
+  const disableCoreTradeDetails = false;
   // For closed trades, SPX input is disabled if it was closed by exit premium (and not an IC being migrated)
   // For closed trades, Exit Premium input is disabled if it was closed by SPX.
-  const disableSpxInputForClosed =
-    isEditingClosedTrade && wasClosedByExitPremium && !isIronCondor;
-  const disableExitPremiumInputForClosed =
-    isEditingClosedTrade && wasClosedBySpx;
+  // Allow editing all fields regardless of how the trade was closed
+  const disableSpxInputForClosed = false;
+  const disableExitPremiumInputForClosed = false;
 
   return (
     <div className="trade-form-overlay">
