@@ -649,17 +649,32 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       console.log("Exit Premium in response:", savedTrade.exitPremium);
 
       if (savedTrade) {
-        // Update local state
-        setTrades(trades.map((t) => (t.id === savedTrade.id ? savedTrade : t)));
+        console.log("Trade updated successfully - refreshing UI with new data");
+        console.log("Updated trade received from API:", savedTrade);
+        console.log("Level after update:", savedTrade.level);
+
+        // Force refresh the local trades state with the new data from the server
+        const updatedTrades = trades.map((t) => {
+          if (t.id === savedTrade.id) {
+            console.log(`Replacing trade ${t.id} with updated version`);
+            console.log(
+              `Old level: ${t.level}, New level: ${savedTrade.level}`
+            );
+            // Ensure we use the server-returned object completely
+            return savedTrade;
+          }
+          return t;
+        });
+
+        // Update state with our new trades array
+        setTrades(updatedTrades);
         setLastSyncTime(new Date());
         setIsEditTradeModalOpen(false);
         setCurrentTrade(null);
 
-        // If there's a callback for trade updates, call it
+        // If there's a callback for trade updates, call it with the refreshed data
         if (onTradeUpdate) {
-          onTradeUpdate(
-            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
-          );
+          onTradeUpdate(updatedTrades);
         }
       } else {
         setError("Failed to update trade. Please try again.");

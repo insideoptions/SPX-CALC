@@ -122,6 +122,19 @@ export const updateTrade = async (trade: Trade): Promise<Trade> => {
     console.log("TRADE TYPE:", typeof trade);
     console.log("TRADE JSON:", JSON.stringify(trade));
 
+    // SPECIAL HANDLING: Extract the level value before sending to ensure it's preserved
+    const levelValue = trade.level;
+    console.log("EXTRACTED LEVEL VALUE:", levelValue);
+
+    // Create a clean copy of the trade with the level explicitly set
+    const tradeCopy = {
+      ...trade,
+      level: levelValue || "Level 2", // Default to Level 2 if empty
+    };
+
+    console.log("MODIFIED TRADE FOR API:", tradeCopy);
+    console.log("MODIFIED TRADE JSON:", JSON.stringify(tradeCopy));
+
     const updateUrl = `${API_BASE_URL}/trades/${
       trade.id
     }?userEmail=${encodeURIComponent(trade.userEmail)}`;
@@ -133,7 +146,8 @@ export const updateTrade = async (trade: Trade): Promise<Trade> => {
         "Content-Type": "application/json",
         "X-User-Email": trade.userEmail,
       },
-      body: JSON.stringify(trade),
+      // Use the modified trade object with fixed level value
+      body: JSON.stringify(tradeCopy),
     });
 
     console.log("Update response status:", response.status);
