@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from "react";
 import "./SpxMatrixUser.css";
 
+// Define separate types for different matrix structures
+interface BaseMatrixRow {
+  buyingPower: string;
+  level1: string | number;
+  level2: string | number;
+  level3: number;
+  level4: number;
+  level5: number;
+}
+
+interface ShiftedMatrixRow extends BaseMatrixRow {
+  level6: number;
+}
+
+type MatrixRow = BaseMatrixRow | ShiftedMatrixRow;
+
 interface MatrixData {
   headerInfo: {
     title: string;
@@ -15,14 +31,7 @@ interface MatrixData {
       title: string;
       subtitle: string;
       description?: string;
-      data: Array<{
-        buyingPower: string;
-        level1: string | number;
-        level2: string | number;
-        level3: number;
-        level4: number;
-        level5: number;
-      }>;
+      data: MatrixRow[];
     };
   };
 }
@@ -45,7 +54,7 @@ const SpxMatrixUser: React.FC = () => {
       level2Start: {
         title: "LEVEL 2 START MATRIX (Standard Matrix)",
         subtitle:
-          "Starts trading after 1 Outside Day\nExpected to trade 6-9 times/month",
+          "Starts trading after 1 Outside Day\nExpect to trade 6-9 times/month",
         data: [
           {
             buyingPower: "$11,800",
@@ -108,9 +117,9 @@ const SpxMatrixUser: React.FC = () => {
       stacked: {
         title: "STACKED MATRIX",
         subtitle:
-          "Only if instructed by David - combines trade sizes for potentially bigger wins",
+          "Starts trading after 2 Consecutive Outside Day\nLevel 2 Quantity was added to Level 3",
         description:
-          "This will potentially increase our profit by (Skip/No trade Level 2) trade alert pass and waiting for (Level 3) alert the next day.",
+          "(Only if instructed by David) This will potentially increase our profit by (Skip/No trade Level 2) trade alert pass and waiting for (Level 3) alert the next day. If a level 3 alert occurs, we can combine the trade sizes from both levels for a potentially bigger win. This approach avoids any potential losses from level 2 trade since we never placed it.",
         data: [
           {
             buyingPower: "$11,800",
@@ -172,63 +181,73 @@ const SpxMatrixUser: React.FC = () => {
       },
       shifted: {
         title: "SHIFTED MATRIX",
-        subtitle: "Alternative matrix configuration",
+        subtitle:
+          "Starts trading after 2 Consecutive Outside Day\nThis Matrix is Sized for 6 Levels, our level 2 quantity becomes level 3 and so forth",
+        description:
+          "(Only if instructed by David) This matrix is designed using 6 Levels, allowing us to use the same buying power by adding a level and shifting each level over.",
         data: [
           {
             buyingPower: "$11,800",
-            level1: 1,
-            level2: 2,
-            level3: 8,
-            level4: 24,
-            level5: 72,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 2,
+            level4: 8,
+            level5: 24,
+            level6: 24,
           },
           {
             buyingPower: "$16,300",
-            level1: 1,
-            level2: 3,
-            level3: 11,
-            level4: 33,
-            level5: 99,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 3,
+            level4: 11,
+            level5: 33,
+            level6: 33,
           },
           {
             buyingPower: "$21,900",
-            level1: 1,
-            level2: 4,
-            level3: 14,
-            level4: 44,
-            level5: 132,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 1,
+            level4: 4,
+            level5: 14,
+            level6: 44,
           },
           {
             buyingPower: "$26,350",
-            level1: 1,
-            level2: 5,
-            level3: 17,
-            level4: 53,
-            level5: 159,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 1,
+            level4: 5,
+            level5: 17,
+            level6: 53,
           },
           {
             buyingPower: "$30,850",
-            level1: 1,
-            level2: 6,
-            level3: 20,
-            level4: 62,
-            level5: 186,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 1,
+            level4: 6,
+            level5: 20,
+            level6: 62,
           },
           {
             buyingPower: "$33,300",
-            level1: 2,
-            level2: 6,
-            level3: 21,
-            level4: 67,
-            level5: 201,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 2,
+            level4: 6,
+            level5: 21,
+            level6: 67,
           },
           {
             buyingPower: "$36,400",
-            level1: 2,
-            level2: 7,
-            level3: 23,
-            level4: 73,
-            level5: 219,
+            level1: "Skip / No Trade",
+            level2: "Skip / No Trade",
+            level3: 2,
+            level4: 7,
+            level5: 23,
+            level6: 73,
           },
         ],
       },
@@ -392,11 +411,17 @@ const SpxMatrixUser: React.FC = () => {
 
   const MatrixDisplayTable = () => {
     const currentMatrix = matrixData.matrices[selectedMatrix];
+    const hasLevel6 = selectedMatrix === "shifted";
 
     return (
       <div className="card">
         <h3 className="section-title">{currentMatrix.title}</h3>
         <p className="matrix-description">{currentMatrix.subtitle}</p>
+        {currentMatrix.description && (
+          <p className="matrix-description description-text">
+            {currentMatrix.description}
+          </p>
+        )}
 
         <div className="matrix-table-container">
           <table className="matrix-table">
@@ -408,6 +433,7 @@ const SpxMatrixUser: React.FC = () => {
                 <th>LEVEL 3</th>
                 <th>LEVEL 4</th>
                 <th>LEVEL 5</th>
+                {hasLevel6 && <th>LEVEL 6</th>}
               </tr>
             </thead>
             <tbody>
@@ -421,6 +447,7 @@ const SpxMatrixUser: React.FC = () => {
                   }
                 >
                   <td className="buying-power-cell">{row.buyingPower}</td>
+                  {/* Generate levels 1-5 for all matrices */}
                   {[1, 2, 3, 4, 5].map((level) => {
                     const quantity = row[`level${level}` as keyof typeof row];
                     const isSkip = quantity === "Skip / No Trade";
@@ -436,6 +463,12 @@ const SpxMatrixUser: React.FC = () => {
                       </td>
                     );
                   })}
+                  {/* Render level6 if it's the shifted matrix */}
+                  {hasLevel6 && (
+                    <td className="quantity-cell trade-cell">
+                      {(row as ShiftedMatrixRow).level6}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

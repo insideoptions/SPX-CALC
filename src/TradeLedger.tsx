@@ -10,7 +10,7 @@ import {
   type Trade,
 } from "./api";
 import "./TradeLedger.css";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 
 // Re-export Trade type for other components that import from TradeLedger
 export type { Trade } from "./api";
@@ -20,9 +20,13 @@ const isConsecutiveDay = (dateStr1: string, dateStr2: string): boolean => {
   const date1 = new Date(dateStr1);
   const date2 = new Date(dateStr2);
   // Normalize to UTC to avoid timezone issues when comparing dates
-  const utcDate1 = new Date(Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate()));
-  const utcDate2 = new Date(Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate()));
-  
+  const utcDate1 = new Date(
+    Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate())
+  );
+  const utcDate2 = new Date(
+    Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate())
+  );
+
   const diffTime = utcDate2.getTime() - utcDate1.getTime();
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   return diffDays === 1;
@@ -41,27 +45,34 @@ const assignEscalationSeriesIds = (incomingTrades: Trade[]): Trade[] => {
     const dateA = new Date(a.tradeDate).getTime();
     const dateB = new Date(b.tradeDate).getTime();
     if (dateA !== dateB) return dateA - dateB;
-    
+
     const levelA = a.level ? getNumericLevel(a.level) : 0;
     const levelB = b.level ? getNumericLevel(b.level) : 0;
     return levelA - levelB;
   });
 
-  const processedTrades = trades.map(t => ({ ...t })); // Work with copies
+  const processedTrades = trades.map((t) => ({ ...t })); // Work with copies
 
   for (let i = 0; i < processedTrades.length; i++) {
     const currentTrade = processedTrades[i];
 
     if (i > 0) {
-      const prevTrade = processedTrades[i-1];
+      const prevTrade = processedTrades[i - 1];
 
       // Ensure tradeDate and level are valid before processing
-      if (prevTrade.tradeDate && currentTrade.tradeDate && prevTrade.level && currentTrade.level) {
+      if (
+        prevTrade.tradeDate &&
+        currentTrade.tradeDate &&
+        prevTrade.level &&
+        currentTrade.level
+      ) {
         const prevLevel = getNumericLevel(prevTrade.level);
         const currentLevel = getNumericLevel(currentTrade.level);
 
-        if (isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) && 
-            currentLevel === prevLevel + 1) {
+        if (
+          isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
+          currentLevel === prevLevel + 1
+        ) {
           // This is an escalation
           if (prevTrade.seriesId) {
             currentTrade.seriesId = prevTrade.seriesId;
@@ -108,8 +119,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setIsMobile(window.innerWidth <= 768);
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const { user } = useAuth();
@@ -136,24 +147,34 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
     try {
       // Ensure the ID is part of the update payload
-      const tradeToUpdate = { ...tradeToClose, ...updatedTradeData, id: tradeToClose.id, userId: user.id, userEmail: user.email };
-      
+      const tradeToUpdate = {
+        ...tradeToClose,
+        ...updatedTradeData,
+        id: tradeToClose.id,
+        userId: user.id,
+        userEmail: user.email,
+      };
+
       const savedTrade = await updateTrade(tradeToUpdate as Trade); // Cast as Trade, assuming updateTrade expects full Trade
 
       if (savedTrade) {
-        setTrades(prevTrades => prevTrades.map(t => t.id === savedTrade.id ? savedTrade : t));
+        setTrades((prevTrades) =>
+          prevTrades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
+        );
         setLastSyncTime(new Date());
         setIsCloseTradeModalOpen(false);
         setTradeToClose(null);
         if (onTradeUpdate) {
-          onTradeUpdate(trades.map(t => (t.id === savedTrade.id ? savedTrade : t)));
+          onTradeUpdate(
+            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
+          );
         }
       } else {
-        setError('Failed to close trade. Please try again.');
+        setError("Failed to close trade. Please try again.");
       }
     } catch (err) {
-      console.error('Error closing trade:', err);
-      setError('Failed to close trade. Please try again.');
+      console.error("Error closing trade:", err);
+      setError("Failed to close trade. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -467,12 +488,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       } else if (currentTrade.spxClosePrice !== undefined) {
         updatedTrade.spxClosePrice = currentTrade.spxClosePrice;
       }
-      
+
       // Debug log to help troubleshoot exit premium issues
-      console.log('Updating trade with:', { 
+      console.log("Updating trade with:", {
         exitPremium: updatedTrade.exitPremium,
         originalExitPremium: currentTrade.exitPremium,
-        newExitPremium: tradeData.exitPremium
+        newExitPremium: tradeData.exitPremium,
       });
       if (
         tradeData.isMaxProfit !== undefined ||
@@ -648,49 +669,171 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {/* Responsive View - Table for Desktop, Cards for Mobile */}
       {!isMobile ? (
         <div className="trades-table-container">
-        <table className="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Level</th>
-              <th>Type</th>
-              <th>Contracts</th>
-              <th>Sell Put</th>
-              <th>Sell Call</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>SPX Close</th>
-              <th>Status</th>
-              <th>P&L</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupedTrades.map((item, index) => {
-              if (item.type === "series") {
-                return (
-                  <tr key={`series-${item.seriesId}`} className="series-row">
-                    <td colSpan={10}>
+          <table className="trades-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Level</th>
+                <th>Type</th>
+                <th>Contracts</th>
+                <th>Sell Put</th>
+                <th>Sell Call</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>SPX Close</th>
+                <th>Status</th>
+                <th>P&L</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupedTrades.map((item, index) => {
+                if (item.type === "series") {
+                  return (
+                    <tr key={`series-${item.seriesId}`} className="series-row">
+                      <td colSpan={10}>
+                        {item.trades.length > 1
+                          ? `${item.trades.length} Trade Series`
+                          : `1 Trade Series`}
+                      </td>
+                      <td
+                        className={`series-pnl ${
+                          item.pnl >= 0 ? "positive" : "negative"
+                        }`}
+                      >
+                        {formatCurrency(item.pnl)}
+                      </td>
+                      <td></td>
+                    </tr>
+                  );
+                } else {
+                  const trade = item.trade;
+                  return (
+                    <tr key={trade.id}>
+                      <td>{formatDate(trade.tradeDate)}</td>
+                      <td>
+                        <span
+                          className={`level-badge level-${trade.level
+                            .toLowerCase()
+                            .replace(" ", "-")}`}
+                        >
+                          {trade.level}
+                        </span>
+                      </td>
+                      <td>{trade.tradeType.replace("_", " ")}</td>
+                      <td>{trade.contractQuantity}</td>
+                      <td>{trade.strikes.sellPut}</td>
+                      <td>{trade.strikes.sellCall}</td>
+                      <td>{trade.entryPremium.toFixed(2)}</td>
+                      <td>
+                        {trade.exitPremium !== undefined &&
+                        trade.exitPremium !== null
+                          ? trade.exitPremium.toFixed(2)
+                          : "0.00"}
+                      </td>
+                      <td
+                        className={`spx-close ${
+                          trade.spxClosePrice &&
+                          (trade.spxClosePrice > trade.strikes.sellCall
+                            ? "breach"
+                            : trade.spxClosePrice < trade.strikes.sellPut
+                            ? "breach"
+                            : "")
+                        }`}
+                      >
+                        {trade.spxClosePrice || "-"}
+                        {trade.isMaxProfit && (
+                          <span className="check-mark">✓</span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge ${trade.status.toLowerCase()}`}
+                        >
+                          {trade.status}
+                        </span>
+                      </td>
+                      <td
+                        className={`pnl ${
+                          trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
+                        }`}
+                      >
+                        {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                      </td>
+                      <td>
+                        <button
+                          className="action-btn"
+                          onClick={() => {
+                            setCurrentTrade(trade);
+                            setIsEditTradeModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="action-btn delete"
+                          onClick={() => handleDeleteTrade(trade)}
+                        >
+                          Delete
+                        </button>
+                        {trade.status === "OPEN" && (
+                          <button
+                            className="action-btn close-btn"
+                            onClick={() => {
+                              setTradeToClose(trade);
+                              setIsCloseTradeModalOpen(true);
+                            }}
+                          >
+                            Close
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                }
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="trades-cards-container">
+          {groupedTrades.map((item, index) => {
+            if (item.type === "series") {
+              return (
+                <div
+                  key={`mobile-series-${item.seriesId}`}
+                  className="series-card"
+                >
+                  <div className="series-card-header">
+                    <span className="series-title">
                       {item.trades.length > 1
                         ? `${item.trades.length} Trade Series`
                         : `1 Trade Series`}
-                    </td>
-                    <td
+                    </span>
+                    <span
                       className={`series-pnl ${
                         item.pnl >= 0 ? "positive" : "negative"
                       }`}
                     >
                       {formatCurrency(item.pnl)}
-                    </td>
-                    <td></td>
-                  </tr>
-                );
-              } else {
-                const trade = item.trade;
-                return (
-                  <tr key={trade.id}>
-                    <td>{formatDate(trade.tradeDate)}</td>
-                    <td>
+                    </span>
+                  </div>
+                </div>
+              );
+            } else {
+              const trade = item.trade;
+              const isBreach =
+                trade.spxClosePrice &&
+                (trade.spxClosePrice > trade.strikes.sellCall ||
+                  trade.spxClosePrice < trade.strikes.sellPut);
+
+              return (
+                <div key={`mobile-trade-${trade.id}`} className="trade-card">
+                  <div className="trade-card-header">
+                    <div className="trade-card-date-level">
+                      <span className="trade-card-date">
+                        {formatDate(trade.tradeDate)}
+                      </span>
                       <span
                         className={`level-badge level-${trade.level
                           .toLowerCase()
@@ -698,43 +841,89 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       >
                         {trade.level}
                       </span>
-                    </td>
-                    <td>{trade.tradeType.replace("_", " ")}</td>
-                    <td>{trade.contractQuantity}</td>
-                    <td>{trade.strikes.sellPut}</td>
-                    <td>{trade.strikes.sellCall}</td>
-                    <td>{trade.entryPremium.toFixed(2)}</td>
-                    <td>{trade.exitPremium !== undefined && trade.exitPremium !== null ? trade.exitPremium.toFixed(2) : "0.00"}</td>
-                    <td
-                      className={`spx-close ${
-                        trade.spxClosePrice &&
-                        (trade.spxClosePrice > trade.strikes.sellCall
-                          ? "breach"
-                          : trade.spxClosePrice < trade.strikes.sellPut
-                          ? "breach"
-                          : "")
-                      }`}
+                    </div>
+                    <span
+                      className={`status-badge ${trade.status.toLowerCase()}`}
                     >
-                      {trade.spxClosePrice || "-"}
-                      {trade.isMaxProfit && (
-                        <span className="check-mark">✓</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`status-badge ${trade.status.toLowerCase()}`}
-                      >
-                        {trade.status}
+                      {trade.status}
+                    </span>
+                  </div>
+
+                  <div className="trade-card-details">
+                    <div className="trade-card-row">
+                      <span className="trade-card-label">Type:</span>
+                      <span className="trade-card-value">
+                        {trade.tradeType.replace("_", " ")}
                       </span>
-                    </td>
-                    <td
-                      className={`pnl ${
-                        trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
-                      }`}
-                    >
-                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-                    </td>
-                    <td>
+                    </div>
+                    <div className="trade-card-row">
+                      <span className="trade-card-label">Contracts:</span>
+                      <span className="trade-card-value">
+                        {trade.contractQuantity}
+                      </span>
+                    </div>
+                    {trade.tradeType === "IRON_CONDOR" && (
+                      <>
+                        <div className="trade-card-row">
+                          <span className="trade-card-label">Sell Put:</span>
+                          <span className="trade-card-value">
+                            {trade.strikes.sellPut}
+                          </span>
+                        </div>
+                        <div className="trade-card-row">
+                          <span className="trade-card-label">Sell Call:</span>
+                          <span className="trade-card-value">
+                            {trade.strikes.sellCall}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="trade-card-row">
+                      <span className="trade-card-label">Entry:</span>
+                      <span className="trade-card-value">
+                        {trade.entryPremium.toFixed(2)}
+                      </span>
+                    </div>
+                    {trade.status === "CLOSED" && (
+                      <div className="trade-card-row">
+                        <span className="trade-card-label">Exit:</span>
+                        <span className="trade-card-value">
+                          {trade.exitPremium !== undefined &&
+                          trade.exitPremium !== null
+                            ? trade.exitPremium.toFixed(2)
+                            : "0.00"}
+                        </span>
+                      </div>
+                    )}
+                    {trade.spxClosePrice && (
+                      <div className="trade-card-row">
+                        <span className="trade-card-label">SPX Close:</span>
+                        <span
+                          className={`trade-card-value ${
+                            isBreach ? "breach" : ""
+                          }`}
+                        >
+                          {trade.spxClosePrice}
+                          {trade.isMaxProfit && (
+                            <span className="check-mark">✓</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="trade-card-footer">
+                    <div className="trade-card-pnl">
+                      <span className="trade-card-label">P&L:</span>
+                      <span
+                        className={`trade-card-pnl-value ${
+                          trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
+                        }`}
+                      >
+                        {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                      </span>
+                    </div>
+                    <div className="trade-card-actions">
                       <button
                         className="action-btn"
                         onClick={() => {
@@ -743,12 +932,6 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         }}
                       >
                         Edit
-                      </button>
-                      <button
-                        className="action-btn delete"
-                        onClick={() => handleDeleteTrade(trade)}
-                      >
-                        Delete
                       </button>
                       {trade.status === "OPEN" && (
                         <button
@@ -761,138 +944,19 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                           Close
                         </button>
                       )}
-                    </td>
-                  </tr>
-                );
-              }
-            })}
-          </tbody>
-        </table>
-      </div>
-      ) : (
-      <div className="trades-cards-container">
-        {groupedTrades.map((item, index) => {
-          if (item.type === "series") {
-            return (
-              <div key={`mobile-series-${item.seriesId}`} className="series-card">
-                <div className="series-card-header">
-                  <span className="series-title">
-                    {item.trades.length > 1
-                      ? `${item.trades.length} Trade Series`
-                      : `1 Trade Series`}
-                  </span>
-                  <span className={`series-pnl ${item.pnl >= 0 ? "positive" : "negative"}`}>
-                    {formatCurrency(item.pnl)}
-                  </span>
-                </div>
-              </div>
-            );
-          } else {
-            const trade = item.trade;
-            const isBreach = 
-              trade.spxClosePrice && 
-              (trade.spxClosePrice > trade.strikes.sellCall || 
-               trade.spxClosePrice < trade.strikes.sellPut);
-              
-            return (
-              <div key={`mobile-trade-${trade.id}`} className="trade-card">
-                <div className="trade-card-header">
-                  <div className="trade-card-date-level">
-                    <span className="trade-card-date">{formatDate(trade.tradeDate)}</span>
-                    <span className={`level-badge level-${trade.level.toLowerCase().replace(" ", "-")}`}>
-                      {trade.level}
-                    </span>
-                  </div>
-                  <span className={`status-badge ${trade.status.toLowerCase()}`}>
-                    {trade.status}
-                  </span>
-                </div>
-                
-                <div className="trade-card-details">
-                  <div className="trade-card-row">
-                    <span className="trade-card-label">Type:</span>
-                    <span className="trade-card-value">{trade.tradeType.replace("_", " ")}</span>
-                  </div>
-                  <div className="trade-card-row">
-                    <span className="trade-card-label">Contracts:</span>
-                    <span className="trade-card-value">{trade.contractQuantity}</span>
-                  </div>
-                  {trade.tradeType === "IRON_CONDOR" && (
-                    <>
-                      <div className="trade-card-row">
-                        <span className="trade-card-label">Sell Put:</span>
-                        <span className="trade-card-value">{trade.strikes.sellPut}</span>
-                      </div>
-                      <div className="trade-card-row">
-                        <span className="trade-card-label">Sell Call:</span>
-                        <span className="trade-card-value">{trade.strikes.sellCall}</span>
-                      </div>
-                    </>
-                  )}
-                  <div className="trade-card-row">
-                    <span className="trade-card-label">Entry:</span>
-                    <span className="trade-card-value">{trade.entryPremium.toFixed(2)}</span>
-                  </div>
-                  {trade.status === "CLOSED" && (
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">Exit:</span>
-                      <span className="trade-card-value">
-                        {trade.exitPremium !== undefined && trade.exitPremium !== null ? trade.exitPremium.toFixed(2) : "0.00"}
-                      </span>
-                    </div>
-                  )}
-                  {trade.spxClosePrice && (
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">SPX Close:</span>
-                      <span className={`trade-card-value ${isBreach ? "breach" : ""}`}>
-                        {trade.spxClosePrice}
-                        {trade.isMaxProfit && <span className="check-mark">✓</span>}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="trade-card-footer">
-                  <div className="trade-card-pnl">
-                    <span className="trade-card-label">P&L:</span>
-                    <span className={`trade-card-pnl-value ${trade.pnl && trade.pnl >= 0 ? "positive" : "negative"}`}>
-                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-                    </span>
-                  </div>
-                  <div className="trade-card-actions">
-                    <button
-                      className="action-btn"
-                      onClick={() => {
-                        setCurrentTrade(trade);
-                        setIsEditTradeModalOpen(true);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    {trade.status === "OPEN" && (
                       <button
-                        className="action-btn close-btn"
-                        onClick={() => {
-                          setTradeToClose(trade);
-                          setIsCloseTradeModalOpen(true);
-                        }}
+                        className="action-btn delete"
+                        onClick={() => handleDeleteTrade(trade)}
                       >
-                        Close
+                        Delete
                       </button>
-                    )}
-                    <button
-                      className="action-btn delete"
-                      onClick={() => handleDeleteTrade(trade)}
-                    >
-                      Delete
-                    </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          }
-        })}
-      </div>
+              );
+            }
+          })}
+        </div>
       )}
 
       {/* Error message */}
@@ -922,7 +986,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {isEditTradeModalOpen && currentTrade && (
         <TradeForm
           trade={currentTrade}
-          onSave={handleSaveTrade} 
+          onSave={handleSaveTrade}
           onCancel={() => {
             setIsEditTradeModalOpen(false);
             setCurrentTrade(null);
@@ -933,7 +997,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
       {/* Close Trade Modal */}
       {isCloseTradeModalOpen && tradeToClose && (
-        <CloseTradeModal 
+        <CloseTradeModal
           trade={tradeToClose}
           onClose={() => {
             setIsCloseTradeModalOpen(false);
