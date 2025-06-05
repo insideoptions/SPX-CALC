@@ -116,8 +116,11 @@ export const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
 
 export const updateTrade = async (trade: Trade): Promise<Trade> => {
   try {
-    console.log("=== UPDATE TRADE DEBUG ===");
+    console.log("=== UPDATE TRADE DEBUG ===\n");
     console.log("Updating trade:", trade);
+    console.log("LEVEL BEING SENT TO API:", trade.level);
+    console.log("TRADE TYPE:", typeof trade);
+    console.log("TRADE JSON:", JSON.stringify(trade));
 
     const updateUrl = `${API_BASE_URL}/trades/${
       trade.id
@@ -145,6 +148,8 @@ export const updateTrade = async (trade: Trade): Promise<Trade> => {
 
     const updatedTrade = await response.json();
     console.log("Trade updated successfully:", updatedTrade);
+    console.log("LEVEL RETURNED FROM API:", updatedTrade.level);
+    console.log("UPDATED TRADE JSON:", JSON.stringify(updatedTrade));
 
     return updatedTrade;
   } catch (error) {

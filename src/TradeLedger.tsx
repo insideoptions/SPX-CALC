@@ -503,9 +503,11 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       console.log("===== EDIT TRADE DEBUG =====");
       console.log("Current trade:", currentTrade);
       console.log("Current trade ID:", currentTrade.id);
+      console.log("Current trade level:", currentTrade.level);
       console.log("Trade data received:", tradeData);
       console.log("Trade data ID:", tradeData.id);
       console.log("Trade level being updated:", tradeData.level);
+      console.log("Trade level type:", typeof tradeData.level);
 
       setIsLoading(true);
       setError(null);
