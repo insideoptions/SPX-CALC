@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
 import CloseTradeModal from "./CloseTradeModal";
-import LevelFixTest from "./LevelFixTest";
+
 import {
   fetchTrades,
   createTrade,
@@ -1031,22 +1031,7 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
             // isClosing prop removed as it's not for general editing
           />
           
-          {/* Add the LevelFixTest component for direct level update testing */}
-          <LevelFixTest 
-            trade={currentTrade}
-            onComplete={(updatedTrade) => {
-              // When the level is successfully updated, refresh the UI
-              console.log("Level fix test completed with:", updatedTrade);
-              const updatedTrades = trades.map(t => 
-                t.id === updatedTrade.id ? updatedTrade : t
-              );
-              setTrades(updatedTrades);
-              
-              // Optional: you can close the edit modal after a successful test
-              // setIsEditTradeModalOpen(false);
-              // setCurrentTrade(null);
-            }}
-          />
+
         </>
       )}
 

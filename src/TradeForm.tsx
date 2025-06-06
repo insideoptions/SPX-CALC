@@ -15,7 +15,27 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
   const [pnlForDisplay, setPnlForDisplay] = useState<number | null>(null);
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    tradeDate: string;
+    level: string;
+    contractQuantity: number;
+    entryPremium: number;
+    exitPremium: number;
+    tradeType: "IRON_CONDOR";
+    sellPut: number;
+    buyPut: number;
+    sellCall: number;
+    buyCall: number;
+    fees: number;
+    notes: string;
+    status?: string;
+    spxClosePrice?: number;
+    customSpxClosePrice?: string;
+    customExitPremium?: string;
+    useCustomExit?: boolean;
+    matrix?: any;
+    buyingPower?: number;
+  }>({
     tradeDate: trade?.tradeDate || new Date().toISOString().split("T")[0],
     level: trade?.level || "Level 2",
     contractQuantity: trade?.contractQuantity || 1,
@@ -28,8 +48,8 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     fees: trade?.fees || 6.56,
     notes: trade?.notes || "",
     matrix: trade?.matrix || "standard",
-    buyingPower: trade?.buyingPower || "$26,350",
-    spxClosePrice: trade?.spxClosePrice || "",
+    buyingPower: trade?.buyingPower || 26350,
+    spxClosePrice: trade?.spxClosePrice || undefined,
     useCustomExit: false,
     customExitPremium: "",
   });
@@ -58,10 +78,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
 
     const spreadWidth = 5; // Assuming 5-point wide spreads for Iron Condors
 
-    if (
-      !isNaN(spxClosePrice) &&
-      String(spxClosePriceInput).trim() !== ""
-    ) {
+    if (!isNaN(spxClosePrice) && String(spxClosePriceInput).trim() !== "") {
       if (
         isNaN(sellPut) ||
         isNaN(sellCall) ||
@@ -122,7 +139,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         // If SPX is inside short strikes, force exit premium to 0 (win)
         let autoExitPremium = 0;
         if (spxClose < sellPut || spxClose > sellCall) {
-          autoExitPremium = 5.00;
+          autoExitPremium = 5.0;
         }
 
         // Only auto-set exit premium if custom exit is not used
@@ -158,11 +175,11 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
         const spxClose = parseFloat(String(formData.spxClosePrice));
         const sellPut = parseFloat(String(formData.sellPut));
         const sellCall = parseFloat(String(formData.sellCall));
-        
+
         let autoExitPremium = 0;
         if (!isNaN(spxClose) && !isNaN(sellPut) && !isNaN(sellCall)) {
           if (spxClose < sellPut || spxClose > sellCall) {
-            autoExitPremium = 5.00;
+            autoExitPremium = 5.0;
           }
         }
 
@@ -197,78 +214,116 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
   };
 
   const handleSave = () => {
-    console.log("Save button clicked");
+    console.log(
+      "%c TRADEFORM - SAVE BUTTON CLICKED ",
+      "background: red; color: white; font-size: 16px"
+    );
 
-    const parseToNumberOrUndefined = (val: any): number | undefined => {
-      const num = parseFloat(String(val));
-      return isNaN(num) || String(val).trim() === "" ? undefined : num;
-    };
-    const parseToIntOrUndefined = (val: any): number | undefined => {
-      const num = parseInt(String(val), 10);
-      return isNaN(num) || String(val).trim() === "" ? undefined : num;
-    };
+    try {
+      // Helper functions for safe number parsing
+      const parseToNumber = (val: any, defaultVal: number = 0): number => {
+        if (val === undefined || val === null || String(val).trim() === "")
+          return defaultVal;
+        const num = parseFloat(String(val));
+        return isNaN(num) ? defaultVal : num;
+      };
 
-    console.log("TradeForm.handleSave: trade ID being used:", trade?.id);
-    
-    // Parse the strike values
-    const sellPut = parseToNumberOrUndefined(formData.sellPut);
-    const sellCall = parseToNumberOrUndefined(formData.sellCall);
-    
-    let tradeDataToSave: Partial<Trade> = {
-      id: trade?.id, // Preserve ID for edits
-      userId: user?.id || "",
-      userEmail: user?.email || "",
-      tradeDate: formData.tradeDate,
-      entryDate: trade?.entryDate || new Date().toISOString(),
-      level: formData.level,
-      contractQuantity: parseToIntOrUndefined(formData.contractQuantity) ?? trade?.contractQuantity ?? 0,
-      entryPremium: parseToNumberOrUndefined(formData.entryPremium) ?? trade?.entryPremium ?? 0,
-      tradeType: formData.tradeType,
-      // Send strikes as individual properties AND as strikes object for compatibility
-      sellPut: sellPut ?? trade?.strikes?.sellPut ?? 0,
-      sellCall: sellCall ?? trade?.strikes?.sellCall ?? 0,
-      buyPut: sellPut ? sellPut - 5 : (trade?.strikes?.sellPut ? trade.strikes.sellPut - 5 : 0),
-      buyCall: sellCall ? sellCall + 5 : (trade?.strikes?.sellCall ? trade.strikes.sellCall + 5 : 0),
-      strikes: {
-        sellPut: sellPut ?? trade?.strikes?.sellPut ?? 0,
-        buyPut: sellPut ? sellPut - 5 : (trade?.strikes?.sellPut ? trade.strikes.sellPut - 5 : 0),
-        sellCall: sellCall ?? trade?.strikes?.sellCall ?? 0,
-        buyCall: sellCall ? sellCall + 5 : (trade?.strikes?.sellCall ? trade.strikes.sellCall + 5 : 0),
-      },
-      fees: parseToNumberOrUndefined(formData.fees) ?? trade?.fees ?? 0,
-      notes: formData.notes,
-      matrix: formData.matrix,
-      buyingPower: formData.buyingPower,
-    };
+      const parseToInt = (val: any, defaultVal: number = 0): number => {
+        if (val === undefined || val === null || String(val).trim() === "")
+          return defaultVal;
+        const num = parseInt(String(val), 10);
+        return isNaN(num) ? defaultVal : num;
+      };
 
-    const currentSpxClosePrice = parseToNumberOrUndefined(formData.spxClosePrice);
-    const currentExitPremium = parseToNumberOrUndefined(formData.exitPremium);
+      // Function to handle undefined or empty values
+      const parseToNumberOrUndefined = (val: any): number | undefined => {
+        if (val === undefined || val === null || String(val).trim() === "")
+          return undefined;
+        const num = parseFloat(String(val));
+        return isNaN(num) ? undefined : num;
+      };
 
-    const pnlFromForm = calculateTradePnl(formData);
-    let finalPnl = pnlFromForm === null ? undefined : pnlFromForm;
+      // Log all starting values for debugging
+      console.log("Form data before processing:", formData);
+      console.log("Original trade if editing:", trade);
+      console.log("Level before save:", String(formData.level || "").trim());
 
-    if (!trade) {
-      // Adding a new trade
-      if (currentSpxClosePrice === undefined) {
-        alert("SPX Close Price is required for all new trades.");
-        return;
-      }
-      tradeDataToSave.status = "CLOSED";
-      tradeDataToSave.exitDate = new Date().toISOString().split("T")[0];
-      tradeDataToSave.spxClosePrice = currentSpxClosePrice;
-      tradeDataToSave.exitPremium = undefined;
-      tradeDataToSave.pnl = finalPnl;
-    } else {
-      // Editing an existing trade
-      if (trade.status === "OPEN") {
-        let closedThisEdit = false;
-        if (formData.tradeType === "IRON_CONDOR" && currentSpxClosePrice !== undefined) {
+      // STEP 1: Prepare core trade data with explicit type handling
+      const tradeDataToSave: Partial<Trade> = {
+        // Core identification fields - preserve ID if editing
+        id: trade?.id,
+        userId: user?.id || "",
+        userEmail: user?.email || "",
+
+        // Core trade fields - ensure proper string handling
+        level: String(formData.level || "").trim() || "Level 2", // Default to Level 2 if empty
+        tradeType: formData.tradeType || "IRON_CONDOR",
+        matrix: formData.matrix || "STANDARD",
+        buyingPower: String(formData.buyingPower || "").trim(),
+        notes: formData.notes || "",
+
+        // Core numeric fields - explicit number conversion
+        contractQuantity: parseToInt(formData.contractQuantity, 1),
+        entryPremium: parseToNumber(formData.entryPremium, 0),
+        fees: parseToNumber(formData.fees, 0),
+
+        // Date handling
+        tradeDate: formData.tradeDate || new Date().toISOString().split("T")[0],
+        entryDate: trade?.entryDate || new Date().toISOString(),
+
+        // Preserve other important fields
+        seriesId: trade?.seriesId,
+        isAutoPopulated: trade?.isAutoPopulated,
+      };
+
+      // STEP 2: Handle strike fields properly
+      // First, extract all strike values with defaults
+      const sellPutValue = parseToNumber(formData.sellPut);
+      const buyPutValue = parseToNumber(formData.buyPut);
+      const sellCallValue = parseToNumber(formData.sellCall);
+      const buyCallValue = parseToNumber(formData.buyCall);
+
+      // Set nested strikes object
+      tradeDataToSave.strikes = {
+        sellPut: sellPutValue,
+        buyPut: buyPutValue,
+        sellCall: sellCallValue,
+        buyCall: buyCallValue,
+      };
+
+      // Also set top-level strike fields for compatibility
+      tradeDataToSave.sellPut = sellPutValue;
+      tradeDataToSave.buyPut = buyPutValue;
+      tradeDataToSave.sellCall = sellCallValue;
+      tradeDataToSave.buyCall = buyCallValue;
+
+      // STEP 3: Handle trade closure status and related fields
+      let closedThisEdit = false;
+
+      // Get current values for calculations
+      const currentSpxClosePrice = parseToNumberOrUndefined(
+        formData.spxClosePrice
+      );
+      const currentExitPremium = parseToNumberOrUndefined(formData.exitPremium);
+
+      // Calculate final PNL for display
+      const finalPnl = pnlForDisplay !== null ? pnlForDisplay : 0;
+
+      // Handle trade status based on original status
+      if (!trade || trade.status === "OPEN") {
+        // Logic for open trades or new trades
+        if (
+          formData.tradeType === "IRON_CONDOR" &&
+          currentSpxClosePrice !== undefined
+        ) {
+          // Close with SPX price for iron condor
           tradeDataToSave.status = "CLOSED";
           tradeDataToSave.spxClosePrice = currentSpxClosePrice;
           tradeDataToSave.exitPremium = undefined;
           tradeDataToSave.pnl = finalPnl;
           closedThisEdit = true;
         } else if (currentExitPremium !== undefined) {
+          // Close with exit premium
           tradeDataToSave.status = "CLOSED";
           tradeDataToSave.exitPremium = currentExitPremium;
           tradeDataToSave.spxClosePrice = undefined;
@@ -277,41 +332,51 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
           const f = tradeDataToSave.fees ?? 0;
           tradeDataToSave.pnl = (ep - currentExitPremium) * cq * 100 - f;
           closedThisEdit = true;
-        }
-
-        if (closedThisEdit) {
-          tradeDataToSave.exitDate = new Date().toISOString().split("T")[0];
         } else {
+          // Keep as open trade
           tradeDataToSave.status = "OPEN";
           tradeDataToSave.pnl = undefined;
           tradeDataToSave.exitDate = undefined;
           tradeDataToSave.exitPremium = undefined;
           tradeDataToSave.spxClosePrice = undefined;
         }
-      } else {
+
+        // Set exit date if the trade was closed in this edit
+        if (closedThisEdit) {
+          tradeDataToSave.exitDate = new Date().toISOString().split("T")[0];
+        }
+      } else if (trade.status === "CLOSED") {
         // Editing a CLOSED trade
         tradeDataToSave.status = "CLOSED";
-        tradeDataToSave.exitDate = trade.exitDate || new Date().toISOString().split("T")[0];
-          
+        tradeDataToSave.exitDate =
+          trade.exitDate || new Date().toISOString().split("T")[0];
+
         // Handle custom exit premium when editing closed trades
         if (formData.useCustomExit && formData.customExitPremium) {
           const customExit = parseFloat(String(formData.customExitPremium));
           if (!isNaN(customExit)) {
             tradeDataToSave.exitPremium = customExit;
+            // Calculate PNL based on custom exit premium
             const ep = tradeDataToSave.entryPremium ?? 0;
             const cq = tradeDataToSave.contractQuantity ?? 0;
             const f = tradeDataToSave.fees ?? 0;
             tradeDataToSave.pnl = (ep - customExit) * cq * 100 - f;
           }
         }
-        
+
+        // Handle iron condor specific logic
         if (formData.tradeType === "IRON_CONDOR") {
           if (currentSpxClosePrice !== undefined) {
             tradeDataToSave.spxClosePrice = currentSpxClosePrice;
             tradeDataToSave.exitPremium = undefined;
             tradeDataToSave.pnl = finalPnl;
-          } else if (trade.spxClosePrice !== undefined && currentSpxClosePrice === undefined) {
-            alert("SPX Close Price cannot be empty for a closed Iron Condor. Please provide a value or revert.");
+          } else if (
+            trade.spxClosePrice !== undefined &&
+            currentSpxClosePrice === undefined
+          ) {
+            alert(
+              "SPX Close Price cannot be empty for a closed Iron Condor. Please provide a value or revert."
+            );
             return;
           } else if (currentExitPremium !== undefined) {
             tradeDataToSave.exitPremium = currentExitPremium;
@@ -324,6 +389,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             tradeDataToSave.pnl = finalPnl;
           }
         } else {
+          // Non-iron condor closed trades
           if (currentExitPremium !== undefined) {
             tradeDataToSave.exitPremium = currentExitPremium;
             tradeDataToSave.spxClosePrice = undefined;
@@ -336,27 +402,41 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
           }
         }
       }
-    }
 
-    // Set isMaxProfit for Iron Condors
-    const finalSpxForMaxProfit = tradeDataToSave.spxClosePrice;
-    if (
-      tradeDataToSave.tradeType === "IRON_CONDOR" &&
-      typeof finalSpxForMaxProfit === "number" &&
-      finalSpxForMaxProfit > 0 &&
-      typeof tradeDataToSave.sellPut === "number" &&
-      typeof tradeDataToSave.sellCall === "number"
-    ) {
-      tradeDataToSave.isMaxProfit =
-        finalSpxForMaxProfit > tradeDataToSave.sellPut &&
-        finalSpxForMaxProfit < tradeDataToSave.sellCall;
-    } else {
-      tradeDataToSave.isMaxProfit = false;
-    }
+      // STEP 4: Calculate isMaxProfit for iron condors with SPX close price
+      if (
+        tradeDataToSave.tradeType === "IRON_CONDOR" &&
+        typeof tradeDataToSave.spxClosePrice === "number" &&
+        tradeDataToSave.spxClosePrice > 0 &&
+        typeof tradeDataToSave.sellPut === "number" &&
+        typeof tradeDataToSave.sellCall === "number"
+      ) {
+        // Within this block, tradeDataToSave.sellPut and .sellCall are known to be numbers
+        tradeDataToSave.isMaxProfit =
+          tradeDataToSave.spxClosePrice > tradeDataToSave.sellPut &&
+          tradeDataToSave.spxClosePrice < tradeDataToSave.sellCall;
+      } else {
+        tradeDataToSave.isMaxProfit = false;
+      }
 
-    console.log("Saving trade data:", tradeDataToSave);
-    onSave(tradeDataToSave);
-  };
+      // Log the final prepared trade data
+      console.log(
+        "Trade data ready to save:",
+        JSON.stringify(tradeDataToSave, null, 2)
+      );
+      console.log("Final level value being saved:", tradeDataToSave.level);
+
+      // Send updated trade data to parent component
+      onSave(tradeDataToSave);
+    } catch (error) {
+      console.error("Error in handleSave:", error);
+      alert(
+        `Error saving trade: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }; // End of handleSave function
 
   const isNewTrade = !trade;
   const isIronCondor = formData.tradeType === "IRON_CONDOR";
@@ -409,10 +489,8 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
     <div className="trade-form-overlay">
       <div className="trade-form-container">
         <div className="trade-form-header">
-          <h3>
-            {trade ? "Edit Trade" : "Add New Trade"}
-          </h3>
-          <button onClick={onCancel} className="close-button">
+          <h3>{trade ? "Edit Trade" : "Add New Trade"}</h3>
+          <button onClick={onCancel} className="cancel-button">
             &times;
           </button>
         </div>
@@ -450,9 +528,9 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
               </div>
               <div className="form-group">
                 <label>Trade Type</label>
-                <input 
-                  type="text" 
-                  value="IRON CONDOR" 
+                <input
+                  type="text"
+                  value="IRON CONDOR"
                   disabled={true}
                   readOnly
                 />
@@ -506,7 +584,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                   />
                 </div>
               )}
-              
+
               {/* Close Early / Partial W/L Section - Always show for editing */}
               {(isNewTrade || trade) && (
                 <div className="form-section early-close-section">
@@ -517,17 +595,19 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                         type="checkbox"
                         id="useCustomExit"
                         checked={formData.useCustomExit}
-                        onChange={(e) => 
+                        onChange={(e) =>
                           handleInputChange("useCustomExit", e.target.checked)
                         }
                       />
-                      <label htmlFor="useCustomExit">Use custom exit premium</label>
+                      <label htmlFor="useCustomExit">
+                        Use custom exit premium
+                      </label>
                     </div>
                     <div className="custom-exit-info">
                       Default: 0.00 for wins, 5.00 for losses
                     </div>
                   </div>
-                  
+
                   {formData.useCustomExit && (
                     <div className="form-group">
                       <label>Custom Exit Premium</label>
@@ -540,13 +620,22 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                         }
                         placeholder="Enter exit premium"
                       />
-                      {formData.entryPremium > 0 && formData.customExitPremium && (
-                        <div className="exit-premium-hint">
-                          {parseFloat(String(formData.customExitPremium)) > parseFloat(String(formData.entryPremium))
-                            ? `Loss: ${(parseFloat(String(formData.customExitPremium)) - parseFloat(String(formData.entryPremium))).toFixed(2)} per contract`
-                            : `Saved: ${(5.00 - parseFloat(String(formData.customExitPremium))).toFixed(2)} per contract from max loss`}
-                        </div>
-                      )}
+                      {formData.entryPremium > 0 &&
+                        formData.customExitPremium && (
+                          <div className="exit-premium-hint">
+                            {parseFloat(String(formData.customExitPremium)) >
+                            parseFloat(String(formData.entryPremium))
+                              ? `Loss: $${(
+                                  parseFloat(
+                                    String(formData.customExitPremium)
+                                  ) - parseFloat(String(formData.entryPremium))
+                                ).toFixed(2)} per contract`
+                              : `Saved: $${(
+                                  5.0 -
+                                  parseFloat(String(formData.customExitPremium))
+                                ).toFixed(2)} per contract from max loss`}
+                          </div>
+                        )}
                     </div>
                   )}
                 </div>
@@ -568,7 +657,7 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                   <label>Calculated P&L</label>
                   <input
                     type="text"
-                    value={`${pnlForDisplay.toFixed(2)}`}
+                    value={`$${pnlForDisplay.toFixed(2)}`}
                     readOnly
                     className={
                       pnlForDisplay >= 0 ? "pnl-positive" : "pnl-negative"
@@ -587,14 +676,13 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                 <input
                   type="number"
                   value={formData.sellPut ?? ""}
-                  onChange={(e) =>
-                    handleInputChange("sellPut", e.target.value)
-                  }
+                  onChange={(e) => handleInputChange("sellPut", e.target.value)}
                   disabled={disableCoreTradeDetails}
                   required
                 />
                 <div className="strike-info">
-                  Buy Put: {formData.sellPut ? Number(formData.sellPut) - 5 : "--"}
+                  Buy Put:{" "}
+                  {formData.sellPut ? Number(formData.sellPut) - 5 : "--"}
                 </div>
               </div>
               <div className="form-group">
@@ -609,7 +697,8 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
                   required
                 />
                 <div className="strike-info">
-                  Buy Call: {formData.sellCall ? Number(formData.sellCall) + 5 : "--"}
+                  Buy Call:{" "}
+                  {formData.sellCall ? Number(formData.sellCall) + 5 : "--"}
                 </div>
               </div>
             </div>
@@ -659,7 +748,13 @@ const TradeForm: React.FC<TradeFormProps> = ({ trade, onSave, onCancel }) => {
             <div className="form-section mobile-pnl">
               <div className="pnl-display-mobile">
                 <span className="pnl-label">Calculated P&L:</span>
-                <span className={pnlForDisplay >= 0 ? "pnl-value positive" : "pnl-value negative"}>
+                <span
+                  className={
+                    pnlForDisplay >= 0
+                      ? "pnl-value positive"
+                      : "pnl-value negative"
+                  }
+                >
                   ${pnlForDisplay.toFixed(2)}
                 </span>
               </div>

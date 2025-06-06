@@ -116,37 +116,40 @@ export const createTrade = async (trade: Omit<Trade, "id">): Promise<Trade> => {
 
 export const updateTrade = async (trade: Trade): Promise<Trade> => {
   try {
-    console.log("=== UPDATE TRADE DEBUG ===\n");
-    console.log("Updating trade:", trade);
-    console.log("LEVEL BEING SENT TO API:", trade.level);
-    console.log("TRADE TYPE:", typeof trade);
-    console.log("TRADE JSON:", JSON.stringify(trade));
-
-    // SPECIAL HANDLING: Extract the level value before sending to ensure it's preserved
-    const levelValue = trade.level;
-    console.log("EXTRACTED LEVEL VALUE:", levelValue);
-
-    // Create a clean copy of the trade with the level explicitly set
+    console.log("%c === UPDATE TRADE API CALL === ", "background: purple; color: white; font-size: 16px");
+    console.log("Original trade object:", trade);
+    console.log("Level field (original):", trade.level, "(type: " + typeof trade.level + ")");
+    
+    // IMPORTANT: Force level field to be a string and ensure it's not lost
+    const levelValue = String(trade.level || "");
+    
+    // Create a clean trade object with level explicitly set at top-level
     const tradeCopy = {
       ...trade,
       level: levelValue || "Level 2", // Default to Level 2 if empty
+      _levelTracking: "LEVEL_FORCE_SET_" + new Date().getTime(), // Add tracking field to verify in response
     };
-
-    console.log("MODIFIED TRADE FOR API:", tradeCopy);
-    console.log("MODIFIED TRADE JSON:", JSON.stringify(tradeCopy));
+    
+    // Double check the level field in the processed object
+    console.log("Level field (processed):", tradeCopy.level, "(type: " + typeof tradeCopy.level + ")");
+    console.log("Full object being sent to API:", JSON.stringify(tradeCopy, null, 2));
 
     const updateUrl = `${API_BASE_URL}/trades/${
       trade.id
-    }?userEmail=${encodeURIComponent(trade.userEmail)}`;
-    console.log("Update URL:", updateUrl);
+    }?userEmail=${encodeURIComponent(trade.userEmail)}&_level=${encodeURIComponent(levelValue)}`; // Add level as query param as backup
+    console.log("API endpoint:", updateUrl);
+    
+    // Add special headers to track the level field
+    const headers = {
+      "Content-Type": "application/json",
+      "X-User-Email": trade.userEmail,
+      "X-Trade-Level": levelValue, // Add level as a header too
+    };
+    console.log("Request headers:", headers);
 
     const response = await fetch(updateUrl, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-User-Email": trade.userEmail,
-      },
-      // Use the modified trade object with fixed level value
+      headers,
       body: JSON.stringify(tradeCopy),
     });
 
