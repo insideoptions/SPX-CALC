@@ -869,19 +869,21 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       ? `${item.trades.length} Trade Series`
                       : `1 Trade Series`}
                   </span>
-                  <span className={`series-pnl ${item.pnl >= 0 ? "positive" : "negative"}`}>
+                  {/* Ensure series-pnl-mobile is styled in CSS */}
+                  <span className={`series-pnl-mobile ${item.pnl >= 0 ? "positive" : "negative"}`}>
                     {formatCurrency(item.pnl)}
                   </span>
                 </div>
+                {/* Optionally, you could list trade dates or levels within a series here */}
               </div>
             );
           } else {
             const trade = item.trade;
-            const isBreach = 
-              trade.spxClosePrice && 
-              (trade.spxClosePrice > trade.strikes.sellCall || 
-               trade.spxClosePrice < trade.strikes.sellPut);
-              
+            const isBreach =
+              trade.spxClosePrice &&
+              (trade.spxClosePrice > trade.strikes.sellCall ||
+                trade.spxClosePrice < trade.strikes.sellPut);
+
             return (
               <div key={`mobile-trade-${trade.id}`} className="trade-card">
                 <div className="trade-card-header">
@@ -891,58 +893,67 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       {trade.level}
                     </span>
                   </div>
-                  <span className={`status-badge ${trade.status.toLowerCase()}`}>
-                    {trade.status}
+                  <span className="trade-card-type">
+                    {trade.tradeType.replace("_", " ")}
                   </span>
                 </div>
-                
-                <div className="trade-card-details">
-                  <div className="trade-card-row">
-                    <span className="trade-card-label">Type:</span>
-                    <span className="trade-card-value">{trade.tradeType.replace("_", " ")}</span>
-                  </div>
-                  <div className="trade-card-row">
+
+                <div className="trade-card-body">
+                  <div className="trade-card-detail-group">
                     <span className="trade-card-label">Contracts:</span>
                     <span className="trade-card-value">{trade.contractQuantity}</span>
                   </div>
+
+                  <div className="trade-card-detail-group">
+                    <span className="trade-card-label">Entry Premium:</span>
+                    <span className="trade-card-value">{trade.entryPremium.toFixed(2)}</span>
+                  </div>
+
                   {trade.tradeType === "IRON_CONDOR" && (
                     <>
-                      <div className="trade-card-row">
+                      <div className="trade-card-detail-group">
                         <span className="trade-card-label">Sell Put:</span>
                         <span className="trade-card-value">{trade.strikes.sellPut}</span>
                       </div>
-                      <div className="trade-card-row">
+                      <div className="trade-card-detail-group">
                         <span className="trade-card-label">Sell Call:</span>
                         <span className="trade-card-value">{trade.strikes.sellCall}</span>
                       </div>
+                      {trade.buyPut && (
+                        <div className="trade-card-detail-group">
+                          <span className="trade-card-label">Buy Put:</span>
+                          <span className="trade-card-value">{trade.buyPut}</span>
+                        </div>
+                      )}
+                      {trade.buyCall && (
+                        <div className="trade-card-detail-group">
+                          <span className="trade-card-label">Buy Call:</span>
+                          <span className="trade-card-value">{trade.buyCall}</span>
+                        </div>
+                      )}
                     </>
                   )}
-                  <div className="trade-card-row">
-                    <span className="trade-card-label">Entry:</span>
-                    <span className="trade-card-value">{trade.entryPremium.toFixed(2)}</span>
-                  </div>
+                  
                   {trade.status === "CLOSED" && (
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">Exit:</span>
+                    <div className="trade-card-detail-group">
+                      <span className="trade-card-label">Exit Premium:</span>
                       <span className="trade-card-value">
                         {(() => {
-                          // If we have an exit premium, show it
                           if (trade.exitPremium !== undefined && trade.exitPremium !== null) {
                             return trade.exitPremium.toFixed(2);
                           }
-                          // If trade is closed and has SPX close price, calculate exit premium on the fly
-                          else if (trade.status === "CLOSED" && trade.spxClosePrice) {
+                          if (trade.spxClosePrice) { // Calculate if SPX close is available
                             const calculatedExitPrem = calculateExitPremium(trade);
-                            return calculatedExitPrem !== undefined ? calculatedExitPrem.toFixed(2) : "0.00";
+                            return calculatedExitPrem !== undefined ? calculatedExitPrem.toFixed(2) : "N/A";
                           }
-                          // Default case
-                          return "0.00";
+                          return "N/A"; // Default if no exit premium and no SPX close
                         })()}
                       </span>
                     </div>
                   )}
+
                   {trade.spxClosePrice && (
-                    <div className="trade-card-row">
+                    <div className="trade-card-detail-group">
                       <span className="trade-card-label">SPX Close:</span>
                       <span className={`trade-card-value ${isBreach ? "breach" : ""}`}>
                         {trade.spxClosePrice}
@@ -950,15 +961,35 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       </span>
                     </div>
                   )}
-                </div>
-                
-                <div className="trade-card-footer">
-                  <div className="trade-card-pnl">
-                    <span className="trade-card-label">P&L:</span>
-                    <span className={`trade-card-pnl-value ${trade.pnl && trade.pnl >= 0 ? "positive" : "negative"}`}>
-                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-                    </span>
+                  
+                  {/* Status and P&L Section */} 
+                  <div className="trade-card-status-pnl">
+                    <div>
+                      <span className="trade-card-label">Status:</span>
+                      <span className={`status-badge ${trade.status.toLowerCase()} trade-card-value`}>
+                        {trade.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="trade-card-label">P&L:</span>
+                      <span className={`trade-card-value ${trade.pnl && trade.pnl >= 0 ? "positive" : "negative"}`}>
+                        {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Notes Section */} 
+                  {trade.notes && (
+                    <div className="trade-card-notes">
+                      <span className="trade-card-label">Notes:</span>
+                      <div className="trade-card-notes-content">
+                        {trade.notes}
+                      </div>
+                    </div>
+                  )}
+                </div> {/* End trade-card-body */} 
+
+                <div className="trade-card-footer">
                   <div className="trade-card-actions">
                     <button
                       className="action-btn"
