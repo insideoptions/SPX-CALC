@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "./GoogleAuthContext";
 import TradeForm from "./TradeForm";
 import CloseTradeModal from "./CloseTradeModal";
+import LevelFixTest from "./LevelFixTest";
 import {
   fetchTrades,
   createTrade,
@@ -10,7 +11,7 @@ import {
   type Trade,
 } from "./api";
 import "./TradeLedger.css";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4 } from 'uuid';
 
 // Re-export Trade type for other components that import from TradeLedger
 export type { Trade } from "./api";
@@ -20,13 +21,9 @@ const isConsecutiveDay = (dateStr1: string, dateStr2: string): boolean => {
   const date1 = new Date(dateStr1);
   const date2 = new Date(dateStr2);
   // Normalize to UTC to avoid timezone issues when comparing dates
-  const utcDate1 = new Date(
-    Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate())
-  );
-  const utcDate2 = new Date(
-    Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate())
-  );
-
+  const utcDate1 = new Date(Date.UTC(date1.getFullYear(), date1.getMonth(), date1.getDate()));
+  const utcDate2 = new Date(Date.UTC(date2.getFullYear(), date2.getMonth(), date2.getDate()));
+  
   const diffTime = utcDate2.getTime() - utcDate1.getTime();
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   return diffDays === 1;
@@ -45,34 +42,27 @@ const assignEscalationSeriesIds = (incomingTrades: Trade[]): Trade[] => {
     const dateA = new Date(a.tradeDate).getTime();
     const dateB = new Date(b.tradeDate).getTime();
     if (dateA !== dateB) return dateA - dateB;
-
+    
     const levelA = a.level ? getNumericLevel(a.level) : 0;
     const levelB = b.level ? getNumericLevel(b.level) : 0;
     return levelA - levelB;
   });
 
-  const processedTrades = trades.map((t) => ({ ...t })); // Work with copies
+  const processedTrades = trades.map(t => ({ ...t })); // Work with copies
 
   for (let i = 0; i < processedTrades.length; i++) {
     const currentTrade = processedTrades[i];
 
     if (i > 0) {
-      const prevTrade = processedTrades[i - 1];
+      const prevTrade = processedTrades[i-1];
 
       // Ensure tradeDate and level are valid before processing
-      if (
-        prevTrade.tradeDate &&
-        currentTrade.tradeDate &&
-        prevTrade.level &&
-        currentTrade.level
-      ) {
+      if (prevTrade.tradeDate && currentTrade.tradeDate && prevTrade.level && currentTrade.level) {
         const prevLevel = getNumericLevel(prevTrade.level);
         const currentLevel = getNumericLevel(currentTrade.level);
 
-        if (
-          isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) &&
-          currentLevel === prevLevel + 1
-        ) {
+        if (isConsecutiveDay(prevTrade.tradeDate, currentTrade.tradeDate) && 
+            currentLevel === prevLevel + 1) {
           // This is an escalation
           if (prevTrade.seriesId) {
             currentTrade.seriesId = prevTrade.seriesId;
@@ -119,8 +109,8 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       setIsMobile(window.innerWidth <= 768);
     };
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const { user } = useAuth();
@@ -152,40 +142,36 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
     try {
       // Ensure the ID is part of the update payload
-      const tradeToUpdate = {
-        ...tradeToClose,
-        ...updatedTradeData,
-        id: tradeToClose.id,
-        userId: user.id,
+      const tradeToUpdate = { 
+        ...tradeToClose, 
+        ...updatedTradeData, 
+        id: tradeToClose.id, 
+        userId: user.id, 
         userEmail: user.email,
-        status: "CLOSED", // Force status to CLOSED
+        status: "CLOSED" // Force status to CLOSED
       };
-
+      
       console.log("Final trade being sent to updateTrade:", tradeToUpdate);
       console.log("Final exitPremium value:", tradeToUpdate.exitPremium);
-
+      
       const savedTrade = await updateTrade(tradeToUpdate as Trade); // Cast as Trade, assuming updateTrade expects full Trade
       console.log("Response from AWS:", savedTrade);
       console.log("Exit Premium in response:", savedTrade.exitPremium);
 
       if (savedTrade) {
-        setTrades((prevTrades) =>
-          prevTrades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
-        );
+        setTrades(prevTrades => prevTrades.map(t => t.id === savedTrade.id ? savedTrade : t));
         setLastSyncTime(new Date());
         setIsCloseTradeModalOpen(false);
         setTradeToClose(null);
         if (onTradeUpdate) {
-          onTradeUpdate(
-            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
-          );
+          onTradeUpdate(trades.map(t => (t.id === savedTrade.id ? savedTrade : t)));
         }
       } else {
-        setError("Failed to close trade. Please try again.");
+        setError('Failed to close trade. Please try again.');
       }
     } catch (err) {
-      console.error("Error closing trade:", err);
-      setError("Failed to close trade. Please try again.");
+      console.error('Error closing trade:', err);
+      setError('Failed to close trade. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -258,16 +244,15 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
 
   // Calculate exit premium for a trade based on SPX close price
   const calculateExitPremium = (trade: Trade): number | undefined => {
-    if (trade.tradeType !== "IRON_CONDOR" || !trade.spxClosePrice)
-      return undefined;
-
+    if (trade.tradeType !== "IRON_CONDOR" || !trade.spxClosePrice) return undefined;
+    
     const spx = trade.spxClosePrice;
     const sellPut = trade.strikes.sellPut;
     const sellCall = trade.strikes.sellCall;
-    const buyPut = trade.buyPut || sellPut - 5;
-    const buyCall = trade.buyCall || sellCall + 5;
+    const buyPut = trade.buyPut || (sellPut - 5);
+    const buyCall = trade.buyCall || (sellCall + 5);
     const spreadWidth = 5;
-
+    
     // Full win: SPX between the short strikes
     if (spx >= sellPut && spx <= sellCall) {
       return 0;
@@ -286,34 +271,31 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       const intrusion = spx - sellCall;
       return parseFloat(((intrusion / spreadWidth) * spreadWidth).toFixed(2));
     }
-
+    
     return undefined;
   };
 
   // Apply filters and sorting
   const getFilteredAndSortedTrades = () => {
     // First ensure all closed trades have exit premiums calculated
-    const tradesWithExitPremiums = trades.map((trade) => {
+    const tradesWithExitPremiums = trades.map(trade => {
       // Only process CLOSED trades that are missing exitPremium
       if (trade.status !== "CLOSED") return trade;
-      if (trade.exitPremium !== undefined && trade.exitPremium !== null)
-        return trade;
-
+      if (trade.exitPremium !== undefined && trade.exitPremium !== null) return trade;
+      
       // Calculate exit premium if missing
       const exitPremium = calculateExitPremium(trade);
       if (exitPremium !== undefined) {
-        console.log(
-          `Calculated exit premium for trade ${trade.id}: ${exitPremium}`
-        );
+        console.log(`Calculated exit premium for trade ${trade.id}: ${exitPremium}`);
         return { ...trade, exitPremium };
       }
-
+      
       return trade;
     });
 
     // We'll use the trades with calculated exit premiums for all operations now
     let filtered = [...tradesWithExitPremiums];
-
+    
     // Apply filter
     if (filterType !== "All Trades") {
       filtered = filtered.filter((trade) => trade.status === filterType);
@@ -495,89 +477,99 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
-  // Handle update trade - FIXED VERSION
+  // Handle update trade - COMPLETELY REWRITTEN to handle all form fields properly
   const handleUpdateTrade = async (tradeData: Partial<Trade>) => {
-    if (!currentTrade) return;
+    console.log("%c EDIT FORM - UPDATE TRADE ", "background: blue; color: white; font-size: 16px");
+    console.log("Form data received:", tradeData);
+    
+    if (!currentTrade) {
+      console.error("ERROR: No current trade to update");
+      return;
+    }
 
     try {
-      console.log("===== EDIT TRADE DEBUG =====");
-      console.log("Current trade:", currentTrade);
-      console.log("Current trade ID:", currentTrade.id);
-      console.log("Trade data received:", tradeData);
-      console.log("Trade data ID:", tradeData.id);
-
       setIsLoading(true);
       setError(null);
 
-      // Handle strikes properly - TradeForm sends strikes as individual properties
-      const strikes = {
-        sellPut: (tradeData as any).sellPut ?? currentTrade.strikes.sellPut,
-        buyPut:
-          (tradeData as any).buyPut ??
-          ((tradeData as any).sellPut
-            ? (tradeData as any).sellPut - 5
-            : currentTrade.strikes.buyPut),
-        sellCall: (tradeData as any).sellCall ?? currentTrade.strikes.sellCall,
-        buyCall:
-          (tradeData as any).buyCall ??
-          ((tradeData as any).sellCall
-            ? (tradeData as any).sellCall + 5
-            : currentTrade.strikes.buyCall),
+      // CRITICAL FIX: Create a complete trade object with proper type handling
+      // Make a copy of current trade as the base
+      const updatedTrade = { ...currentTrade };
+      
+      // For debugging
+      console.log("Original trade before update:", currentTrade);
+      
+      // EXPLICITLY apply each field from the form data
+      // Core identification 
+      updatedTrade.id = currentTrade.id; // Always preserve the ID
+      updatedTrade.userId = user?.id || currentTrade.userId;
+      updatedTrade.userEmail = user?.email || currentTrade.userEmail;
+      
+      // Basic information fields - explicitly transfer with type checking
+      if (tradeData.tradeDate) updatedTrade.tradeDate = tradeData.tradeDate;
+      if (tradeData.level !== undefined) updatedTrade.level = String(tradeData.level);
+      if (tradeData.contractQuantity !== undefined) updatedTrade.contractQuantity = Number(tradeData.contractQuantity);
+      if (tradeData.entryPremium !== undefined) updatedTrade.entryPremium = Number(tradeData.entryPremium);
+      if (tradeData.tradeType) updatedTrade.tradeType = tradeData.tradeType;
+      if (tradeData.fees !== undefined) updatedTrade.fees = Number(tradeData.fees);
+      if (tradeData.matrix) updatedTrade.matrix = tradeData.matrix;
+      if (tradeData.buyingPower) updatedTrade.buyingPower = String(tradeData.buyingPower); 
+      if (tradeData.notes !== undefined) updatedTrade.notes = tradeData.notes;
+      
+      // Status and result fields
+      if (tradeData.status) updatedTrade.status = tradeData.status;
+      if (tradeData.exitDate) updatedTrade.exitDate = tradeData.exitDate;
+      if (tradeData.exitPremium !== undefined) updatedTrade.exitPremium = Number(tradeData.exitPremium);
+      if (tradeData.spxClosePrice !== undefined) updatedTrade.spxClosePrice = Number(tradeData.spxClosePrice);
+      if (tradeData.pnl !== undefined) updatedTrade.pnl = Number(tradeData.pnl);
+      if (tradeData.isMaxProfit !== undefined) updatedTrade.isMaxProfit = Boolean(tradeData.isMaxProfit);
+      
+      // Strike fields - handle both nested and top-level
+      // Always update the nested strikes object
+      updatedTrade.strikes = {
+        sellPut: tradeData.sellPut !== undefined ? Number(tradeData.sellPut) : 
+                (tradeData.strikes?.sellPut !== undefined ? Number(tradeData.strikes.sellPut) : updatedTrade.strikes.sellPut),
+        buyPut: tradeData.buyPut !== undefined ? Number(tradeData.buyPut) : 
+               (tradeData.strikes?.buyPut !== undefined ? Number(tradeData.strikes.buyPut) : updatedTrade.strikes.buyPut),
+        sellCall: tradeData.sellCall !== undefined ? Number(tradeData.sellCall) : 
+                 (tradeData.strikes?.sellCall !== undefined ? Number(tradeData.strikes.sellCall) : updatedTrade.strikes.sellCall),
+        buyCall: tradeData.buyCall !== undefined ? Number(tradeData.buyCall) : 
+                (tradeData.strikes?.buyCall !== undefined ? Number(tradeData.strikes.buyCall) : updatedTrade.strikes.buyCall)
       };
-
-      // Ensure ID is preserved and all required fields are present
-      const updatedTrade: Trade = {
-        ...currentTrade, // Start with all current trade data
-        ...tradeData, // Override with new data
-        id: currentTrade.id, // Ensure ID is preserved
-        strikes: strikes, // Use properly constructed strikes
-        userId: currentTrade.userId,
-        userEmail: currentTrade.userEmail,
-        isAutoPopulated: currentTrade.isAutoPopulated,
-      };
-
-      // Handle optional fields more carefully
-      if (tradeData.exitPremium !== undefined) {
-        updatedTrade.exitPremium = tradeData.exitPremium;
-      }
-      if (tradeData.spxClosePrice !== undefined) {
-        updatedTrade.spxClosePrice = tradeData.spxClosePrice;
-      }
-      if (tradeData.pnl !== undefined) {
-        updatedTrade.pnl = tradeData.pnl;
-      }
-      if (tradeData.exitDate !== undefined) {
-        updatedTrade.exitDate = tradeData.exitDate;
-      }
-      if (tradeData.notes !== undefined) {
-        updatedTrade.notes = tradeData.notes;
-      }
-      if (tradeData.isMaxProfit !== undefined) {
-        updatedTrade.isMaxProfit = tradeData.isMaxProfit;
-      }
-      if (tradeData.seriesId !== undefined) {
-        updatedTrade.seriesId = tradeData.seriesId;
-      }
-
-      console.log("Final trade being sent to API:", updatedTrade);
-
-      // Update in AWS
+      
+      // Also set top-level strike properties for compatibility
+      updatedTrade.sellPut = updatedTrade.strikes.sellPut;
+      updatedTrade.buyPut = updatedTrade.strikes.buyPut;
+      updatedTrade.sellCall = updatedTrade.strikes.sellCall;
+      updatedTrade.buyCall = updatedTrade.strikes.buyCall;
+      
+      // Misc fields
+      if (tradeData.seriesId) updatedTrade.seriesId = tradeData.seriesId;
+      if (tradeData.isAutoPopulated !== undefined) updatedTrade.isAutoPopulated = Boolean(tradeData.isAutoPopulated);
+      
+      // Show final object being sent to API
+      console.log("%c SENDING TO API ", "background: orange; color: black; font-size: 16px");
+      console.log("Final trade to update:", updatedTrade);
+      
+      // Send to AWS API
       const savedTrade = await updateTrade(updatedTrade);
-      console.log("Response from AWS:", savedTrade);
+      console.log("%c API RESPONSE ", "background: green; color: white; font-size: 16px");
+      console.log("Response from API:", savedTrade);
 
       if (savedTrade) {
-        // Update local state
-        setTrades(trades.map((t) => (t.id === savedTrade.id ? savedTrade : t)));
+        // Update local state with the updated trade
+        const updatedTrades = trades.map(t => t.id === savedTrade.id ? savedTrade : t);
+        
+        setTrades(updatedTrades);
         setLastSyncTime(new Date());
         setIsEditTradeModalOpen(false);
         setCurrentTrade(null);
 
-        // If there's a callback for trade updates, call it
         if (onTradeUpdate) {
-          onTradeUpdate(
-            trades.map((t) => (t.id === savedTrade.id ? savedTrade : t))
-          );
+          onTradeUpdate(updatedTrades);
         }
+        
+        console.log("%c UPDATE SUCCESSFUL ", "background: green; color: white; font-size: 16px");
+        console.log("Trade updated successfully:", savedTrade.id);
       } else {
         setError("Failed to update trade. Please try again.");
       }
@@ -589,50 +581,56 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
     }
   };
 
+  // The handleSaveClosedTrade function is now at line 131,
+
   // Handle delete trade - IMPROVED ERROR HANDLING
-  const handleDeleteTrade = async (trade: Trade) => {
-    if (window.confirm("Delete this trade?")) {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        console.log(
-          "Attempting to delete trade:",
-          trade.id,
-          "for user:",
-          user?.email
-        );
-
-        const success = await deleteTrade(trade.id, user?.email || "");
-
-        if (success) {
-          // Remove from local state
-          const updatedTrades = trades.filter((t) => t.id !== trade.id);
-          setTrades(updatedTrades);
-          setLastSyncTime(new Date());
-
-          // If there's a callback for trade updates, call it
-          if (onTradeUpdate) {
-            onTradeUpdate(updatedTrades);
-          }
-
-          console.log("Trade deleted successfully");
-        } else {
-          setError("Failed to delete trade. Please try again.");
-        }
-      } catch (err) {
-        console.error("Error deleting trade:", err);
-        setError(
-          `Failed to delete trade: ${
-            err instanceof Error ? err.message : "Unknown error"
-          }`
-        );
       } finally {
         setIsLoading(false);
       }
     }
   };
 
+  // Calculate trade statistics based on current trades
+  const calculateStats = () => {
+    if (!trades.length) return { total: 0, wins: 0, losses: 0, winRate: 0, totalPnL: 0 };
+    
+    const results = trades.reduce((acc: { total: number, wins: number, losses: number, totalPnL: number }, trade: Trade) => {
+      acc.total += 1;
+      
+      const pnl = Number(trade.pnl || 0);
+      if (pnl > 0) {
+        acc.wins += 1;
+      } else if (pnl < 0) {
+        acc.losses += 1;
+      }
+      
+      acc.totalPnL += pnl;
+      return acc;
+    }, { total: 0, wins: 0, losses: 0, totalPnL: 0 });
+    
+    results.winRate = results.total > 0 ? (results.wins / results.total) * 100 : 0;
+    return results;
+  };
+
+  // Group trades by series ID for display
+  const getGroupedTrades = () => {
+    if (!groupBySeries) return trades;
+    
+    // First assign series IDs to related trades
+    const tradesWithSeriesIds = assignEscalationSeriesIds([...trades]);
+    
+    // Then group them by series ID
+    const grouped = tradesWithSeriesIds.reduce((acc: Record<string, Trade[]>, trade: Trade) => {
+      const seriesId = trade.seriesId || trade.id;
+      if (!acc[seriesId]) acc[seriesId] = [];
+      acc[seriesId].push(trade);
+      return acc;
+    }, {} as Record<string, Trade[]>);
+    
+    // Flatten back to an array but keep the grouping
+    return Object.values(grouped).flat();
+  };
+  
   const stats = calculateStats();
   const groupedTrades = getGroupedTrades();
 
@@ -724,189 +722,49 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       {/* Responsive View - Table for Desktop, Cards for Mobile */}
       {!isMobile ? (
         <div className="trades-table-container">
-          <table className="trades-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Level</th>
-                <th>Type</th>
-                <th>Contracts</th>
-                <th>Sell Put</th>
-                <th>Sell Call</th>
-                <th>Entry</th>
-                <th>Exit</th>
-                <th>SPX Close</th>
-                <th>Status</th>
-                <th>P&L</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupedTrades.map((item, index) => {
-                if (item.type === "series") {
-                  return (
-                    <tr key={`series-${item.seriesId}`} className="series-row">
-                      <td colSpan={10}>
-                        {item.trades.length > 1
-                          ? `${item.trades.length} Trade Series`
-                          : `1 Trade Series`}
-                      </td>
-                      <td
-                        className={`series-pnl ${
-                          item.pnl >= 0 ? "positive" : "negative"
-                        }`}
-                      >
-                        {formatCurrency(item.pnl)}
-                      </td>
-                      <td></td>
-                    </tr>
-                  );
-                } else {
-                  const trade = item.trade;
-                  return (
-                    <tr key={trade.id}>
-                      <td>{formatDate(trade.tradeDate)}</td>
-                      <td>
-                        <span
-                          className={`level-badge level-${trade.level
-                            .toLowerCase()
-                            .replace(" ", "-")}`}
-                        >
-                          {trade.level}
-                        </span>
-                      </td>
-                      <td>{trade.tradeType.replace("_", " ")}</td>
-                      <td>{trade.contractQuantity}</td>
-                      <td>{trade.strikes.sellPut}</td>
-                      <td>{trade.strikes.sellCall}</td>
-                      <td>{trade.entryPremium.toFixed(2)}</td>
-                      <td>
-                        {(() => {
-                          // If we have an exit premium, show it
-                          if (
-                            trade.exitPremium !== undefined &&
-                            trade.exitPremium !== null
-                          ) {
-                            return trade.exitPremium.toFixed(2);
-                          }
-                          // If trade is closed and has SPX close price, calculate exit premium on the fly
-                          else if (
-                            trade.status === "CLOSED" &&
-                            trade.spxClosePrice
-                          ) {
-                            const calculatedExitPrem =
-                              calculateExitPremium(trade);
-                            return calculatedExitPrem !== undefined
-                              ? calculatedExitPrem.toFixed(2)
-                              : "0.00";
-                          }
-                          // Default case
-                          return "0.00";
-                        })()}
-                      </td>
-                      <td
-                        className={`spx-close ${
-                          trade.spxClosePrice &&
-                          (trade.spxClosePrice > trade.strikes.sellCall
-                            ? "breach"
-                            : trade.spxClosePrice < trade.strikes.sellPut
-                            ? "breach"
-                            : "")
-                        }`}
-                      >
-                        {trade.spxClosePrice || "-"}
-                        {trade.isMaxProfit && (
-                          <span className="check-mark">✓</span>
-                        )}
-                      </td>
-                      <td>
-                        <span
-                          className={`status-badge ${trade.status.toLowerCase()}`}
-                        >
-                          {trade.status}
-                        </span>
-                      </td>
-                      <td
-                        className={`pnl ${
-                          trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
-                        }`}
-                      >
-                        {trade.pnl ? formatCurrency(trade.pnl) : "-"}
-                      </td>
-                      <td>
-                        <button
-                          className="action-btn"
-                          onClick={() => {
-                            setCurrentTrade(trade);
-                            setIsEditTradeModalOpen(true);
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="action-btn delete"
-                          onClick={() => handleDeleteTrade(trade)}
-                        >
-                          Delete
-                        </button>
-                        {trade.status === "OPEN" && (
-                          <button
-                            className="action-btn close-btn"
-                            onClick={() => {
-                              setTradeToClose(trade);
-                              setIsCloseTradeModalOpen(true);
-                            }}
-                          >
-                            Close
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                }
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="trades-cards-container">
-          {groupedTrades.map((item, index) => {
-            if (item.type === "series") {
-              return (
-                <div
-                  key={`mobile-series-${item.seriesId}`}
-                  className="series-card"
-                >
-                  <div className="series-card-header">
-                    <span className="series-title">
+        <table className="trades-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Level</th>
+              <th>Type</th>
+              <th>Contracts</th>
+              <th>Sell Put</th>
+              <th>Sell Call</th>
+              <th>Entry</th>
+              <th>Exit</th>
+              <th>SPX Close</th>
+              <th>Status</th>
+              <th>P&L</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groupedTrades.map((item, index) => {
+              if (item.type === "series") {
+                return (
+                  <tr key={`series-${item.seriesId}`} className="series-row">
+                    <td colSpan={10}>
                       {item.trades.length > 1
                         ? `${item.trades.length} Trade Series`
                         : `1 Trade Series`}
-                    </span>
-                    <span
+                    </td>
+                    <td
                       className={`series-pnl ${
                         item.pnl >= 0 ? "positive" : "negative"
                       }`}
                     >
                       {formatCurrency(item.pnl)}
-                    </span>
-                  </div>
-                </div>
-              );
-            } else {
-              const trade = item.trade;
-              const isBreach =
-                trade.spxClosePrice &&
-                (trade.spxClosePrice > trade.strikes.sellCall ||
-                  trade.spxClosePrice < trade.strikes.sellPut);
-
-              return (
-                <div key={`mobile-trade-${trade.id}`} className="trade-card">
-                  <div className="trade-card-header">
-                    <div className="trade-card-date-level">
-                      <span className="trade-card-date">
-                        {formatDate(trade.tradeDate)}
-                      </span>
+                    </td>
+                    <td></td>
+                  </tr>
+                );
+              } else {
+                const trade = item.trade;
+                return (
+                  <tr key={trade.id}>
+                    <td>{formatDate(trade.tradeDate)}</td>
+                    <td>
                       <span
                         className={`level-badge level-${trade.level
                           .toLowerCase()
@@ -914,107 +772,57 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                       >
                         {trade.level}
                       </span>
-                    </div>
-                    <span
-                      className={`status-badge ${trade.status.toLowerCase()}`}
+                    </td>
+                    <td>{trade.tradeType.replace("_", " ")}</td>
+                    <td>{trade.contractQuantity}</td>
+                    <td>{trade.strikes.sellPut}</td>
+                    <td>{trade.strikes.sellCall}</td>
+                    <td>{trade.entryPremium.toFixed(2)}</td>
+                    <td>
+                      {(() => {
+                        // If we have an exit premium, show it
+                        if (trade.exitPremium !== undefined && trade.exitPremium !== null) {
+                          return trade.exitPremium.toFixed(2);
+                        }
+                        // If trade is closed and has SPX close price, calculate exit premium on the fly
+                        else if (trade.status === "CLOSED" && trade.spxClosePrice) {
+                          const calculatedExitPrem = calculateExitPremium(trade);
+                          return calculatedExitPrem !== undefined ? calculatedExitPrem.toFixed(2) : "0.00";
+                        }
+                        // Default case
+                        return "0.00";
+                      })()}
+                    </td>
+                    <td
+                      className={`spx-close ${
+                        trade.spxClosePrice &&
+                        (trade.spxClosePrice > trade.strikes.sellCall
+                          ? "breach"
+                          : trade.spxClosePrice < trade.strikes.sellPut
+                          ? "breach"
+                          : "")
+                      }`}
                     >
-                      {trade.status}
-                    </span>
-                  </div>
-
-                  <div className="trade-card-details">
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">Type:</span>
-                      <span className="trade-card-value">
-                        {trade.tradeType.replace("_", " ")}
-                      </span>
-                    </div>
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">Contracts:</span>
-                      <span className="trade-card-value">
-                        {trade.contractQuantity}
-                      </span>
-                    </div>
-                    {trade.tradeType === "IRON_CONDOR" && (
-                      <>
-                        <div className="trade-card-row">
-                          <span className="trade-card-label">Sell Put:</span>
-                          <span className="trade-card-value">
-                            {trade.strikes.sellPut}
-                          </span>
-                        </div>
-                        <div className="trade-card-row">
-                          <span className="trade-card-label">Sell Call:</span>
-                          <span className="trade-card-value">
-                            {trade.strikes.sellCall}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    <div className="trade-card-row">
-                      <span className="trade-card-label">Entry:</span>
-                      <span className="trade-card-value">
-                        {trade.entryPremium.toFixed(2)}
-                      </span>
-                    </div>
-                    {trade.status === "CLOSED" && (
-                      <div className="trade-card-row">
-                        <span className="trade-card-label">Exit:</span>
-                        <span className="trade-card-value">
-                          {(() => {
-                            // If we have an exit premium, show it
-                            if (
-                              trade.exitPremium !== undefined &&
-                              trade.exitPremium !== null
-                            ) {
-                              return trade.exitPremium.toFixed(2);
-                            }
-                            // If trade is closed and has SPX close price, calculate exit premium on the fly
-                            else if (
-                              trade.status === "CLOSED" &&
-                              trade.spxClosePrice
-                            ) {
-                              const calculatedExitPrem =
-                                calculateExitPremium(trade);
-                              return calculatedExitPrem !== undefined
-                                ? calculatedExitPrem.toFixed(2)
-                                : "0.00";
-                            }
-                            // Default case
-                            return "0.00";
-                          })()}
-                        </span>
-                      </div>
-                    )}
-                    {trade.spxClosePrice && (
-                      <div className="trade-card-row">
-                        <span className="trade-card-label">SPX Close:</span>
-                        <span
-                          className={`trade-card-value ${
-                            isBreach ? "breach" : ""
-                          }`}
-                        >
-                          {trade.spxClosePrice}
-                          {trade.isMaxProfit && (
-                            <span className="check-mark">✓</span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="trade-card-footer">
-                    <div className="trade-card-pnl">
-                      <span className="trade-card-label">P&L:</span>
+                      {trade.spxClosePrice || "-"}
+                      {trade.isMaxProfit && (
+                        <span className="check-mark">✓</span>
+                      )}
+                    </td>
+                    <td>
                       <span
-                        className={`trade-card-pnl-value ${
-                          trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
-                        }`}
+                        className={`status-badge ${trade.status.toLowerCase()}`}
                       >
-                        {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                        {trade.status}
                       </span>
-                    </div>
-                    <div className="trade-card-actions">
+                    </td>
+                    <td
+                      className={`pnl ${
+                        trade.pnl && trade.pnl >= 0 ? "positive" : "negative"
+                      }`}
+                    >
+                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                    </td>
+                    <td>
                       <button
                         className="action-btn"
                         onClick={() => {
@@ -1023,6 +831,12 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                         }}
                       >
                         Edit
+                      </button>
+                      <button
+                        className="action-btn delete"
+                        onClick={() => handleDeleteTrade(trade)}
+                      >
+                        Delete
                       </button>
                       {trade.status === "OPEN" && (
                         <button
@@ -1035,19 +849,150 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
                           Close
                         </button>
                       )}
-                      <button
-                        className="action-btn delete"
-                        onClick={() => handleDeleteTrade(trade)}
-                      >
-                        Delete
-                      </button>
+                    </td>
+                  </tr>
+                );
+              }
+            })}
+          </tbody>
+        </table>
+      </div>
+      ) : (
+      <div className="trades-cards-container">
+        {groupedTrades.map((item, index) => {
+          if (item.type === "series") {
+            return (
+              <div key={`mobile-series-${item.seriesId}`} className="series-card">
+                <div className="series-card-header">
+                  <span className="series-title">
+                    {item.trades.length > 1
+                      ? `${item.trades.length} Trade Series`
+                      : `1 Trade Series`}
+                  </span>
+                  <span className={`series-pnl ${item.pnl >= 0 ? "positive" : "negative"}`}>
+                    {formatCurrency(item.pnl)}
+                  </span>
+                </div>
+              </div>
+            );
+          } else {
+            const trade = item.trade;
+            const isBreach = 
+              trade.spxClosePrice && 
+              (trade.spxClosePrice > trade.strikes.sellCall || 
+               trade.spxClosePrice < trade.strikes.sellPut);
+              
+            return (
+              <div key={`mobile-trade-${trade.id}`} className="trade-card">
+                <div className="trade-card-header">
+                  <div className="trade-card-date-level">
+                    <span className="trade-card-date">{formatDate(trade.tradeDate)}</span>
+                    <span className={`level-badge level-${trade.level.toLowerCase().replace(" ", "-")}`}>
+                      {trade.level}
+                    </span>
+                  </div>
+                  <span className={`status-badge ${trade.status.toLowerCase()}`}>
+                    {trade.status}
+                  </span>
+                </div>
+                
+                <div className="trade-card-details">
+                  <div className="trade-card-row">
+                    <span className="trade-card-label">Type:</span>
+                    <span className="trade-card-value">{trade.tradeType.replace("_", " ")}</span>
+                  </div>
+                  <div className="trade-card-row">
+                    <span className="trade-card-label">Contracts:</span>
+                    <span className="trade-card-value">{trade.contractQuantity}</span>
+                  </div>
+                  {trade.tradeType === "IRON_CONDOR" && (
+                    <>
+                      <div className="trade-card-row">
+                        <span className="trade-card-label">Sell Put:</span>
+                        <span className="trade-card-value">{trade.strikes.sellPut}</span>
+                      </div>
+                      <div className="trade-card-row">
+                        <span className="trade-card-label">Sell Call:</span>
+                        <span className="trade-card-value">{trade.strikes.sellCall}</span>
+                      </div>
+                    </>
+                  )}
+                  <div className="trade-card-row">
+                    <span className="trade-card-label">Entry:</span>
+                    <span className="trade-card-value">{trade.entryPremium.toFixed(2)}</span>
+                  </div>
+                  {trade.status === "CLOSED" && (
+                    <div className="trade-card-row">
+                      <span className="trade-card-label">Exit:</span>
+                      <span className="trade-card-value">
+                        {(() => {
+                          // If we have an exit premium, show it
+                          if (trade.exitPremium !== undefined && trade.exitPremium !== null) {
+                            return trade.exitPremium.toFixed(2);
+                          }
+                          // If trade is closed and has SPX close price, calculate exit premium on the fly
+                          else if (trade.status === "CLOSED" && trade.spxClosePrice) {
+                            const calculatedExitPrem = calculateExitPremium(trade);
+                            return calculatedExitPrem !== undefined ? calculatedExitPrem.toFixed(2) : "0.00";
+                          }
+                          // Default case
+                          return "0.00";
+                        })()}
+                      </span>
                     </div>
+                  )}
+                  {trade.spxClosePrice && (
+                    <div className="trade-card-row">
+                      <span className="trade-card-label">SPX Close:</span>
+                      <span className={`trade-card-value ${isBreach ? "breach" : ""}`}>
+                        {trade.spxClosePrice}
+                        {trade.isMaxProfit && <span className="check-mark">✓</span>}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="trade-card-footer">
+                  <div className="trade-card-pnl">
+                    <span className="trade-card-label">P&L:</span>
+                    <span className={`trade-card-pnl-value ${trade.pnl && trade.pnl >= 0 ? "positive" : "negative"}`}>
+                      {trade.pnl ? formatCurrency(trade.pnl) : "-"}
+                    </span>
+                  </div>
+                  <div className="trade-card-actions">
+                    <button
+                      className="action-btn"
+                      onClick={() => {
+                        setCurrentTrade(trade);
+                        setIsEditTradeModalOpen(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    {trade.status === "OPEN" && (
+                      <button
+                        className="action-btn close-btn"
+                        onClick={() => {
+                          setTradeToClose(trade);
+                          setIsCloseTradeModalOpen(true);
+                        }}
+                      >
+                        Close
+                      </button>
+                    )}
+                    <button
+                      className="action-btn delete"
+                      onClick={() => handleDeleteTrade(trade)}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
-              );
-            }
-          })}
-        </div>
+              </div>
+            );
+          }
+        })}
+      </div>
       )}
 
       {/* Error message */}
@@ -1075,19 +1020,39 @@ const TradeLedger: React.FC<TradeLedgerProps> = ({ onTradeUpdate }) => {
       )}
 
       {isEditTradeModalOpen && currentTrade && (
-        <TradeForm
-          trade={currentTrade}
-          onSave={handleUpdateTrade}
-          onCancel={() => {
-            setIsEditTradeModalOpen(false);
-            setCurrentTrade(null);
-          }}
-        />
+        <>
+          <TradeForm
+            trade={currentTrade}
+            onSave={handleUpdateTrade}
+            onCancel={() => {
+              setIsEditTradeModalOpen(false);
+              setCurrentTrade(null);
+            }}
+            // isClosing prop removed as it's not for general editing
+          />
+          
+          {/* Add the LevelFixTest component for direct level update testing */}
+          <LevelFixTest 
+            trade={currentTrade}
+            onComplete={(updatedTrade) => {
+              // When the level is successfully updated, refresh the UI
+              console.log("Level fix test completed with:", updatedTrade);
+              const updatedTrades = trades.map(t => 
+                t.id === updatedTrade.id ? updatedTrade : t
+              );
+              setTrades(updatedTrades);
+              
+              // Optional: you can close the edit modal after a successful test
+              // setIsEditTradeModalOpen(false);
+              // setCurrentTrade(null);
+            }}
+          />
+        </>
       )}
 
       {/* Close Trade Modal */}
       {isCloseTradeModalOpen && tradeToClose && (
-        <CloseTradeModal
+        <CloseTradeModal 
           trade={tradeToClose}
           onClose={() => {
             setIsCloseTradeModalOpen(false);
